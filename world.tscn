@@ -1,0 +1,71 @@
+[gd_scene load_steps=10 format=3 uid="uid://bc1oc5nnldhpf"]
+
+[ext_resource type="Texture2D" uid="uid://dj3si6echdek3" path="res://Solarsystemscope_texture_8k_stars.jpg" id="1_bfi6i"]
+[ext_resource type="Script" path="res://test_driver.gd" id="1_rs74j"]
+[ext_resource type="Script" path="res://CameraGimbal.gd" id="2_qjnjl"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_tueks"]
+panorama = ExtResource("1_bfi6i")
+
+[sub_resource type="Sky" id="Sky_l8mcq"]
+sky_material = SubResource("PanoramaSkyMaterial_tueks")
+
+[sub_resource type="Environment" id="Environment_axqk5"]
+background_mode = 2
+sky = SubResource("Sky_l8mcq")
+ambient_light_source = 1
+reflected_light_source = 1
+
+[sub_resource type="SphereMesh" id="SphereMesh_mcfs0"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ne3jq"]
+shading_mode = 0
+albedo_color = Color(0.819608, 0.615686, 0.0980392, 1)
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_bk0pi"]
+
+[node name="World" type="Node3D"]
+script = ExtResource("1_rs74j")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_axqk5")
+
+[node name="TestTarget" type="Area3D" parent="." groups=["camera_targetable"]]
+metadata/_edit_group_ = true
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget"]
+mesh = SubResource("SphereMesh_mcfs0")
+surface_material_override/0 = SubResource("StandardMaterial3D_ne3jq")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget"]
+shape = SubResource("SphereShape3D_bk0pi")
+
+[node name="TestTarget2" type="Area3D" parent="." groups=["camera_targetable"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.4864, 3.47461, -8.28175)
+metadata/_edit_group_ = true
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget2"]
+mesh = SubResource("SphereMesh_mcfs0")
+surface_material_override/0 = SubResource("StandardMaterial3D_ne3jq")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget2"]
+shape = SubResource("SphereShape3D_bk0pi")
+
+[node name="TestTarget3" type="Area3D" parent="." groups=["camera_targetable"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13.9369, -15.8785, -18.0284)
+metadata/_edit_group_ = true
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget3"]
+mesh = SubResource("SphereMesh_mcfs0")
+surface_material_override/0 = SubResource("StandardMaterial3D_ne3jq")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget3"]
+shape = SubResource("SphereShape3D_bk0pi")
+
+[node name="CameraGimbal" type="Node3D" parent="."]
+script = ExtResource("2_qjnjl")
+
+[node name="Camera3D" type="Camera3D" parent="CameraGimbal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 23.3421)
+current = true
+fov = 50.0

@@ -17,21 +17,29 @@ var time_quantum : float = 0.1	# TODO TODO: spec and setting (in init or not?)
 ## The lookahead cache; stores [time quantum, pos doublevec, vel doublevec] "tuples".
 var cache : RingBuffer
 
-
 ## The cache's tail: index of last valid state in the cache.
 var tail : int
 
+## Callable callback that returns an array of [pos, vel, mu] tuples from the Gravitors,
+## for use in the propagator.
+var state_fetch : Callable
+
 
 ## Initialize a new Gravitee, with an initial Cartesian state (position and velocity) at
-## the given time. Optionally specify the initial lookahead cache size (positive integer).
-func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float, cache_size : int = 256) -> void:
+## the given time. Provide the callable that furnishes the gravitor state array.
+## Optionally specify the initial lookahead cache size (positive integer).
+func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float, 
+	state_fetch_ : Callable, cache_size : int = 256
+	) -> void:
+	
+	state_fetch = state_fetch_
 	
 	# Work out the initial time quantum
 	var time_quant_0 = int(time_0 / time_quantum) + 1
 	var time_to_mark = (float(time_quant_0) * time_quantum) - time_0
 	
 	# Propagate initial state forward to said quantum
-	var prop_state = _propagation_wrapper(pos_0, vel_0, time_to_mark)
+	var prop_state = _propagate(pos_0, vel_0, time_0, time_to_mark)
 	
 	# Set up the lookahead cache with initial state data
 	cache = RingBuffer.new(cache_size)
@@ -86,7 +94,8 @@ func state_at_time(time : float, update_cache : bool = false):
 		var preceding_index = bsearch_left
 		
 		var preceding_state = cache.get_at(preceding_index)
-		var step_time = time - float(preceding_state[0] * time_quantum)
+		var preceding_time = float(preceding_state[0] * time_quantum)
+		var step_time = time - preceding_time
 		
 		# If we're an updating step, move the cache head
 		if update_cache:
@@ -94,7 +103,7 @@ func state_at_time(time : float, update_cache : bool = false):
 			tail -= preceding_index
 		
 		# Subpropagate forward from the cached time to get the actual desired state
-		return _propagation_wrapper(preceding_state[1], preceding_state[2], step_time)
+		return _propagate(preceding_state[1], preceding_state[2], preceding_time, step_time)
 
 
 ## Attempts to fill the next empty slot in the cache by propagating once
@@ -102,14 +111,51 @@ func state_at_time(time : float, update_cache : bool = false):
 func propagate_cache() -> void:
 	if tail < (cache.length() - 1):
 		var last_state = cache.get_at(tail)
+		var last_time = float(last_state[0]) * time_quantum
 		
 		var timestep := 1 # TODO timestep
 		
-		var new_state = _propagation_wrapper(last_state[1], last_state[2], float(timestep) * time_quantum)
+		var new_state = _propagate(last_state[1], last_state[2], last_time, float(timestep) * time_quantum)
 		tail += 1
 		cache.set_at(tail, [last_state[0] + timestep, new_state[0], new_state[1]])
 
 
-# TODO
-func _propagation_wrapper(pos : DoubleVector3, vel : DoubleVector3, dt : float) -> Array:
+
+# ========== THE RUTH-FOREST SYMPLECTIC PROPAGATOR ==========
+
+func _propagate(pos : DoubleVector3, vel : DoubleVector3, time : float, dt : float) -> Array:
+	# Fetch the gravitor states
+	# TODO time consideration: 'before' or 'after'? Or is it OK as-is?
+	var gravitors = state_fetch.call(time)
+	
+	# Run the Ruth-Forest and return result
+	return _ruth_forest_integrator(pos, vel, time, dt, gravitors)
+
+
+# TODO doc
+# TODO there's a simpler version in our notes somewhere?
+func _ruth_forest_integrator(cur_pos : DoubleVector3, cur_vel : DoubleVector3, time : float, dt : float, gravitors : Array) -> Array:
+	const cbrt_two := pow(2.0, 1.0 / 3.0)
+	const _c_0 := 1.0 / (2.0 * (2.0 - cbrt_two))
+	const _c_1 := (1.0 - cbrt_two) / (2.0 * (2.0 - cbrt_two))
+	const _d_0 := 1.0 / (2.0 - cbrt_two)
+	const c := [_c_0, _c_1, _c_1, _c_0]
+	const d := [_d_0, -cbrt_two / (2.0 - cbrt_two), _d_0, 0.0]
+	
+	var pos := cur_pos.clone()
+	var vel := cur_vel.clone()
+	for i in range(4):
+		pos = pos.add(vel.mul(c[i] * dt))
+		
+		var acc = DoubleVector3.ZERO()
+		
+		for gravitor in gravitors:
+			var rel_pos := pos.sub(gravitor[0]) # 0 : gravitor position
+			var rel_pos_dot := rel_pos.dot(rel_pos)
+			var grav_mag : float = gravitor[2] / rel_pos_dot # 2: gravitor mu
+				
+			var acc_normal = rel_pos.div(-sqrt(rel_pos_dot))
+				
+			acc = acc.add(acc_normal.mul(grav_mag))
+		vel = vel.add(acc.mul(d[i] * dt))
 	return [pos, vel]

@@ -30,7 +30,7 @@ static func query(
 		vel_0 : DoubleVector3,	# Velocity of body at time_0
 		time_0 : float,		# Reference time
 		time : float,		# Query time: returned pos and vel are at this time
-		mu : float,			# Kepler Gravitational Parameter (G * M)
+		mu : float,			# Orbitee Kepler Gravitational Parameter (G * M)
 		psi := 0.0			# Optional initial guess for Universal Anomaly
 							# (Converges just fine without one)
 	) -> Array:

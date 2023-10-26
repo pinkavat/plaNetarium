@@ -32,7 +32,6 @@ func _process(delta):
 			sponch.propagate_cache()
 			$Label.text = "propagating cache up to " + str(sponch.cache.get_at(sponch.tail)[0] * sponch.time_quantum)
 			
-			$SponchPrediction.global_position = (sponch.cache.get_at(sponch.tail)[1].vec3()) * space_scale
 		elif state == 2:
 			sponch.cache.shift_left(sponch.cache.length() - 1) # TODO: hadn't thought of this
 			sponch.tail = 0
@@ -54,7 +53,14 @@ func _process(delta):
 		# Move sponch
 		$TestTarget3.global_position = state[0].vec3() * space_scale
 		
-	$Label.text = $Label.text + "\ncurrent time: "+ str(sim_time) +"\nvalid ticks: " + str(valid_tick_count) + "\ntimestep: " + str(sponch.timestep)
+	$Label.text = $Label.text + "\ncache tail: "+str(sponch.cache.get_at(sponch.tail)[0] * sponch.time_quantum)+"\ncurrent time: "+ str(sim_time) +"\nvalid ticks: " + str(valid_tick_count) + "\ntimestep: " + str(sponch.timestep)
+	
+	# WITH REMAINING TIME IN THE TICK, PROPAGATE SPONCH'S CACHE.
+	for i in 256: # TODO time sensitivity
+		sponch.propagate_cache()
+	
+	# Move the prediction position shower
+	$SponchPrediction.global_position = (sponch.cache.get_at(sponch.tail)[1].vec3()) * space_scale
 
 
 func temp_move_planets(time):

@@ -13,6 +13,8 @@ extends RefCounted
 ## This value specifies the amount of simulation time per time quantum
 var time_quantum : float = 0.1	# TODO TODO: spec and setting (in init or not?)
 
+## TODO doc
+var timestep : int = 1
 
 ## The lookahead cache; stores [time quantum, pos doublevec, vel doublevec] "tuples".
 var cache : RingBuffer
@@ -20,7 +22,7 @@ var cache : RingBuffer
 ## The cache's tail: index of last valid state in the cache.
 var tail : int
 
-## Callable callback that returns an array of [pos, vel, mu] tuples from the Gravitors,
+## Callable callback that returns the name->[pos, vel, mu] dictionary from the Gravitors,
 ## for use in the propagator.
 var state_fetch : Callable
 
@@ -113,28 +115,64 @@ func propagate_cache() -> void:
 		var last_state = cache.get_at(tail)
 		var last_time = float(last_state[0]) * time_quantum
 		
-		var timestep := 1 # TODO timestep
+		var new_state
+		# TODO: PEFRL may be better than Forest-Ruth, but can't double the timestep within the
+		# same epsilon (TODO why not) -- we may need more GRANULAR control over timestep size
+		# TODO: Also don't forget that timesteps ought to be TIME TRACKS -- i.e. time VALUES
+		# are shared wherever possible so that gravitor caching can hit better.
 		
-		var new_state = _propagate(last_state[1], last_state[2], last_time, float(timestep) * time_quantum)
+		while true: # TODO safetyvalve; rehash the logic -- proof of concept good!
+			var half_state = _propagate(last_state[1], last_state[2], last_time, float(timestep) * time_quantum)
+			half_state = _propagate(half_state[0], half_state[1], last_time + float(timestep) * time_quantum, float(timestep) * time_quantum)
+			var full_state = _propagate(last_state[1], last_state[2], last_time, float(timestep * 2) * time_quantum)
+		
+			if half_state[0].equals_approx(full_state[0], 2.0): # TODO hyperparam
+				timestep *= 2
+				new_state = half_state
+				break
+			else:
+				timestep /= 2
+		
 		tail += 1
 		cache.set_at(tail, [last_state[0] + timestep, new_state[0], new_state[1]])
 
 
 
-# ========== THE RUTH-FOREST SYMPLECTIC PROPAGATOR ==========
+# ========== PROPAGATOR ==========
 
 func _propagate(pos : DoubleVector3, vel : DoubleVector3, time : float, dt : float) -> Array:
 	# Fetch the gravitor states
 	# TODO time consideration: 'before' or 'after'? Or is it OK as-is?
+	# TODO or even time-slice (that'd be abysmal performance-wise!)
 	var gravitors = state_fetch.call(time)
 	
-	# Run the Ruth-Forest and return result
-	return _ruth_forest_integrator(pos, vel, time, dt, gravitors)
+	# Run the Integrator and return result
+	#return _ruth_forest_integrator(pos, vel, dt, _gravity_force_get.bind(gravitors))
+	return _PEFRL_integrator(pos, vel, dt, _gravity_force_get.bind(gravitors))
+
+
+# Helper for getting gravity force from position; bind the gravitors before passing this
+# as a callable to the integrator
+# TODO can we shrink/speed this...?
+func _gravity_force_get(pos : DoubleVector3, gravitors : Dictionary) -> DoubleVector3:
+	var acc = DoubleVector3.ZERO() # TODO nomenclt.
+	for gravitor in gravitors.values():
+		var rel_pos := pos.sub(gravitor[0]) # 0 : gravitor position
+		var rel_pos_dot := rel_pos.dot(rel_pos)
+		var grav_mag : float = gravitor[2] / rel_pos_dot # 2: gravitor mu
+				
+		var acc_normal = rel_pos.div(-sqrt(rel_pos_dot))
+				
+		acc = acc.add(acc_normal.mul(grav_mag))
+	return acc
 
 
 # TODO doc
-# TODO there's a simpler version in our notes somewhere?
-func _ruth_forest_integrator(cur_pos : DoubleVector3, cur_vel : DoubleVector3, time : float, dt : float, gravitors : Array) -> Array:
+# Old Forest-ruth integrator (probably not the most efficient implementation, either)
+#
+# Forest, E.; Ruth, Ronald D. (1990). "Fourth-order symplectic integration". 
+# Physica D. 43: 105–117. doi:10.1016/0167-2789(90)90019-L.
+func _ruth_forest_integrator(cur_pos : DoubleVector3, cur_vel : DoubleVector3, dt : float, gravity_getter : Callable) -> Array:
 	const cbrt_two := pow(2.0, 1.0 / 3.0)
 	const _c_0 := 1.0 / (2.0 * (2.0 - cbrt_two))
 	const _c_1 := (1.0 - cbrt_two) / (2.0 * (2.0 - cbrt_two))
@@ -147,15 +185,43 @@ func _ruth_forest_integrator(cur_pos : DoubleVector3, cur_vel : DoubleVector3, t
 	for i in range(4):
 		pos = pos.add(vel.mul(c[i] * dt))
 		
-		var acc = DoubleVector3.ZERO()
+		var acc = gravity_getter.call(pos)
 		
-		for gravitor in gravitors:
-			var rel_pos := pos.sub(gravitor[0]) # 0 : gravitor position
-			var rel_pos_dot := rel_pos.dot(rel_pos)
-			var grav_mag : float = gravitor[2] / rel_pos_dot # 2: gravitor mu
-				
-			var acc_normal = rel_pos.div(-sqrt(rel_pos_dot))
-				
-			acc = acc.add(acc_normal.mul(grav_mag))
 		vel = vel.add(acc.mul(d[i] * dt))
+		
+	return [pos, vel]
+
+
+# Position-Extended-Forest-Ruth-Like, nominally 340x more accurate than Forest-Ruth, at the cost
+# of one more force sample.
+#
+# Omelyan, Igor & Mryglod, Ihor & Reinhard, Folk. (2002). "Optimized Forest-Ruth- and Suzuki-like algorithms for integration of 
+# motion in many-body systems". Computer Physics Communications. 146. 188. 10.1016/S0010-4655(02)00451-4. 
+func _PEFRL_integrator(cur_pos : DoubleVector3, cur_vel : DoubleVector3, dt : float, gravity_getter : Callable) -> Array:
+	const xi = 0.1786178958448091
+	const lambda = -0.2123418310626054
+	const chi = -0.06626458266981849
+	
+	var pos := cur_pos.clone() # TODO we really need to get this discrepancy sorted, esp. vis. handbacks etc.
+	var vel := cur_vel.clone() # Honestly the whole thing should be data-oriented C++
+	
+	# Begin PEFRL steps (loop unrolled -- why not, eh?)
+	pos = pos.add(vel.mul(xi * dt))
+	
+	var acc = gravity_getter.call(pos) # "Update forces" pass
+	vel = vel.add(acc.mul(dt * (0.5 - lambda)))
+	pos = pos.add(vel.mul(dt * chi))
+	
+	acc = gravity_getter.call(pos)
+	vel = vel.add(acc.mul(dt * lambda))
+	pos = pos.add(vel.mul(dt * (1.0 - 2.0 * (chi + xi))))
+	
+	acc = gravity_getter.call(pos)
+	vel = vel.add(acc.mul(dt * lambda))
+	pos = pos.add(vel.mul(dt * chi))
+	
+	acc = gravity_getter.call(pos)
+	vel = vel.add(acc.mul(dt * (0.5 - lambda)))
+	pos = pos.add(vel.mul(dt * xi))
+	
 	return [pos, vel]

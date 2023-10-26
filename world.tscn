@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://bc1oc5nnldhpf"]
+[gd_scene load_steps=14 format=3 uid="uid://bc1oc5nnldhpf"]
 
 [ext_resource type="Texture2D" uid="uid://dj3si6echdek3" path="res://Solarsystemscope_texture_8k_stars.jpg" id="1_bfi6i"]
 [ext_resource type="Script" path="res://test_driver.gd" id="1_rs74j"]
@@ -24,6 +24,22 @@ albedo_color = Color(0.819608, 0.615686, 0.0980392, 1)
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_bk0pi"]
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3yawp"]
+shading_mode = 0
+albedo_color = Color(0.203922, 0.615686, 0.537255, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pmi4p"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.701961, 0.682353, 0.643137, 0.380392)
+
+[sub_resource type="SphereMesh" id="SphereMesh_g50c7"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wvxy7"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 1, 1, 0.262745)
+
 [node name="World" type="Node3D"]
 script = ExtResource("1_rs74j")
 
@@ -41,23 +57,22 @@ surface_material_override/0 = SubResource("StandardMaterial3D_ne3jq")
 shape = SubResource("SphereShape3D_bk0pi")
 
 [node name="TestTarget2" type="Area3D" parent="." groups=["camera_targetable"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.4864, 3.47461, -8.28175)
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 0, 0, 0)
 metadata/_edit_group_ = true
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget2"]
 mesh = SubResource("SphereMesh_mcfs0")
-surface_material_override/0 = SubResource("StandardMaterial3D_ne3jq")
+surface_material_override/0 = SubResource("StandardMaterial3D_3yawp")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget2"]
 shape = SubResource("SphereShape3D_bk0pi")
 
 [node name="TestTarget3" type="Area3D" parent="." groups=["camera_targetable"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13.9369, -15.8785, -18.0284)
 metadata/_edit_group_ = true
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget3"]
 mesh = SubResource("SphereMesh_mcfs0")
-surface_material_override/0 = SubResource("StandardMaterial3D_ne3jq")
+surface_material_override/0 = SubResource("StandardMaterial3D_pmi4p")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget3"]
 shape = SubResource("SphereShape3D_bk0pi")
@@ -69,3 +84,12 @@ script = ExtResource("2_qjnjl")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 23.3421)
 current = true
 fov = 50.0
+
+[node name="Label" type="Label" parent="."]
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="SponchPrediction" type="MeshInstance3D" parent="."]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
+mesh = SubResource("SphereMesh_g50c7")
+surface_material_override/0 = SubResource("StandardMaterial3D_wvxy7")

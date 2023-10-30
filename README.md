@@ -2,7 +2,7 @@
 
 In-development Godot library for N-body orbital dynamics simulation, wherein multiple 'Gravitors' (stars, planets, moons, etc.), moving along fixed Keplerian orbital tracks, generate gravity that acts on 'Gravitees' (satellites, spacecraft, etc.). 
 
-Designed with a focus on game development (real-time performance and easy interactability) rather than actual orbital analysis.
+Designed with a focus on game development (real-time performance and easy interactability) rather than actual orbital analysis. May result in spontaneous very-low-altitude intercepts if used as a planning tool.
 
 The Keplerian orbits are computed with W.H. Goodyear's Universal Variable Formulation[^1], while the N-body dynamics ~~are~~ *were* done with Forest and Ruth's fourth-order symplectic integrator[^2], but are now done with PEFRL[^3] (as it's nominally 340x more accurate, at the cost of an extra force sampling).
 

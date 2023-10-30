@@ -2,7 +2,7 @@ extends Node3D
 
 # Test driver script
 
-var sponch : Gravitee
+var sponch : OldGravitee
 
 var sol : Gravitor
 var earth : Gravitor
@@ -81,6 +81,6 @@ func _ready():
 	
 	#sponch = Gravitee.new(moon.pos_0.add(earth.pos_0), moon.vel_0.add(earth.vel_0), 0.0, sol.all_states_at_time)
 	#sponch = Gravitee.new(DoubleVector3.new(147461658472.428, 0, -535222439.85885), DoubleVector3.new(-156.266628704918, 0, -31359.6968614126), 0.0, sol.all_states_at_time)
-	sponch = Gravitee.new(lunar_global[0], lunar_global[1], 0.0, sol.all_states_at_time)
+	sponch = OldGravitee.new(lunar_global[0], lunar_global[1], 0.0, sol.all_states_at_time)
 	#sponch = Gravitee.new(earth.pos_0.add(DoubleVector3.new(6628000, 0, 0)), earth.vel_0.add(DoubleVector3.new(0, 7750, 0)), 0.0, sol.all_states_at_time)
 	#print(sol.all_states_at_time(0.0))

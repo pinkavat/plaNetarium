@@ -14,7 +14,7 @@ extends Node3D
 #var rotate_speed_gesture := 0.01 
 var rotate_speed_mouse := 0.002
 var zoom_speed_gesture := 1.0
-var move_lerp_factor := 6.0
+var move_time := 0.5
 
 # TODO: dynamic (or a least parametrized as exposed!)
 var min_zoom := 1.5
@@ -27,12 +27,41 @@ var grabbed := false
 var azimuth := 0.0
 var altitude := 0.0
 var target_node = null
+var move_orig_pos := Vector3.ZERO
+var move_amount := 0.0
+var move_tween : Tween
 
 
 # Position interpolation to target
-func _process(delta):
+func _process(_delta):
 	var target_pos = target_node.global_position if target_node else Vector3.ZERO
-	global_position = global_position.lerp(target_pos, delta * move_lerp_factor)
+	#global_position = global_position.lerp(target_pos, delta * move_lerp_factor)
+	global_position = target_pos + (move_orig_pos - target_pos) * move_amount
+	
+
+
+func _start_move_towards(target):
+	# Disconnect
+	if target_node and target_node.tree_exiting.is_connected(_target_exiting_tree):
+		target_node.tree_exiting.disconnect(_target_exiting_tree)
+	# Connect
+	target_node = target
+	if target_node:
+		target_node.tree_exiting.connect(_target_exiting_tree)
+	
+	# Animate
+	move_orig_pos = global_position
+	move_amount = 1.0
+	if move_tween:
+		move_tween.stop()
+	move_tween = create_tween()
+	move_tween.tween_property(self, "move_amount", 0.0, move_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _target_exiting_tree():
+	# If the camera's still in the tree, start the move:
+	if is_inside_tree():
+		_start_move_towards(null)
 
 
 # Helper for multiple kinds of camera rotation
@@ -90,7 +119,8 @@ func _unhandled_input(event):
 				
 				if ray_result and ray_result["collider"].is_in_group("camera_targetable"):
 					# We hit a targetable node; retarget the camera
-					target_node = ray_result["collider"]
+					if not target_node == ray_result["collider"]:
+						_start_move_towards(ray_result["collider"])
 				else:
 					# Ray didn't hit anything, so it's a grab-to-move.
 					grabbed = true

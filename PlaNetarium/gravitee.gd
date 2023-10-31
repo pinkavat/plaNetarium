@@ -31,7 +31,7 @@ var state_fetch : Callable
 ## constitutes acceptable error. This criterion compares two states that are meant
 ## to be identical; timesteps will be as large as possible while satisfying it.
 var states_approx_equal : Callable = func(d_half : Array, full : Array) -> bool:
-	return d_half[1].equals_approx(full[1], 1.0)
+	return d_half[1].equals_approx(full[1], 1.0) # position within a meter
 
 
 
@@ -64,7 +64,9 @@ func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float,
 ##		("we don't know, but might eventually")
 ##	- if the requested time falls WITHIN the cache, returns [pos doublevec, vel doublevec]
 ##
-## if update_cache is true, the cache head will move to the time quantum preceding the request.
+## if update_cache is true, the cache head will move:
+##	- if the request fell within the cache, the head will move to the quantum preceding
+##	- if the request was beyond the cache, the head will move to the cache tail
 ## (that is, set it to true for simulation time-advance, and false for prediction)
 func state_at_time(time : float, update_cache : bool = false):
 	
@@ -76,9 +78,9 @@ func state_at_time(time : float, update_cache : bool = false):
 	# will return before the value is used.
 	var preceding_cache_index : int
 	
-	# 2a) Special check: TODO
-	if false:
-		pass # TODO set preceding_cache_index
+	# 2a) Special check: see if the time is in the first cache slot
+	if long_cache_tail > 0 and (qt >= long_cache.get_at(0)[0] and qt < long_cache.get_at(1)[0]):
+		preceding_cache_index = 0
 	
 	# 2b) Check if time is BEFORE the long cache
 	elif qt < long_cache.get_at(0)[0]:
@@ -88,12 +90,13 @@ func state_at_time(time : float, update_cache : bool = false):
 	# 2c) Check if time is AFTER the long cache
 	elif qt >= long_cache.get_at(long_cache_tail)[0]:
 		# Follows cache; "we may eventually know but don't yet"
-		if long_cache_tail == (long_cache.length() - 1):
-			# No more cache space
-			return 2 # TODO UNDOC RETURN FORCE PROBLEM
-		else:
-			# More cache space; requested time may possibly be computed
-			return 1 # TODO UNDOC RETURN FORCE PROBLEM
+		
+		if long_cache_tail == (long_cache.length() - 1) and update_cache:
+			# If it's an updating request and the cache is out of space, we have
+			# to flush the cache, or we'll get stuck.
+			long_cache.shift_left(long_cache.length() - 1)
+			long_cache_tail = 0
+		return 1
 	
 	else:
 		# Requested time falls within the long cache
@@ -130,15 +133,18 @@ func state_at_time(time : float, update_cache : bool = false):
 
 
 # TODO doc
-# TODO: REPLACE/CONTROL WITH GRAVITOR SWEEPLINE, If profitable!
+# TODO: coarseness metric
+# TODO: don't forget gravitor sweepline idea (it'd be higher up)
 func advance_cache() -> void:
 	if long_cache_tail < (long_cache.length() - 1):
 		var tail_state = long_cache.get_at(long_cache_tail)
 		
-		# TODO coarseness criterion loop
 		var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
 		
-		long_cache_tail += 1
+		if long_cache_tail <= 0 or (not long_cache.get_at(long_cache_tail)[1].equals_approx(long_cache.get_at(long_cache_tail - 1)[1], 100_000_000.0)):
+			# Not enough items OR coarseness criterion satisfied: add the state to the cache.
+			long_cache_tail += 1
+		# Otherwise coarseness criterion failed, and no need to add: replace the tail.
 		long_cache.set_at(long_cache_tail, next_state)
 
 
@@ -150,7 +156,7 @@ func advance_cache() -> void:
 # is as large as possible. The resulting state is guaranteed to be before or at the target
 # time provided. 
 func _smart_propagate(state : Array, target_time : int) -> Array:
-
+	
 	# 1) Check edge cases
 	var t : int = state[0]
 	if t >= target_time:

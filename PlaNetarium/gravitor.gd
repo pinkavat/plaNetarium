@@ -7,7 +7,7 @@ extends RefCounted
 ## Tree Node
 
 ## Unique name for this gravitor (used to extract the gravitor from the system state)
-var name : String # TODO: this ain't a great solution.
+var name : StringName
 
 
 ## Standard Gravitational Parameter (G * M) of this body.
@@ -32,7 +32,7 @@ var prev_psi := 0.0
 ## Factory function: creates and adds a new Gravitor to the Gravitor tree from
 ## the given orbital parameters. Returns the new child for reference.
 func add_child_from_elements(
-	name_ : String,					# Unique name for the Gravitor
+	name_ : StringName,				# Unique name for the Gravitor
 	mu_ : float,					# Gravitational Parameter of new child
 	
 	semimajor_axis_ : float = 1.0,	# The 'fatter radius' of the ellipse
@@ -63,7 +63,7 @@ func add_child_from_elements(
 ## Factory function: creates and adds a new Gravitor to the Gravitor tree from
 ## the given apsides (a simplification of the above).
 func add_child_from_apsides(
-	name_ : String,						# Unique name for the Gravitor
+	name_ : StringName,					# Unique name for the Gravitor
 	mu_ : float,						# Gravitational Parameter of new child
 	
 	periapsis_distance_ : float = 1.0,	# Distance to periapsis from orbitee
@@ -89,13 +89,13 @@ func add_child_from_apsides(
 
 
 ## Static factory function: creates an immobile root primary Gravitor.
-static func make_root_gravitor(name_ : String, mu_ : float) -> Gravitor:
+static func make_root_gravitor(name_ : StringName, mu_ : float) -> Gravitor:
 	return Gravitor.new(name_, DoubleVector3.ZERO(), DoubleVector3.ZERO(), mu_)
 
 
 ## Initialize a Gravitor with the given initial state (Cart2Cart, TODO improve).
 ## Not really meaningfully useable outside of invocation from the static factories above.
-func _init(name_ : String, pos_0_ : DoubleVector3, vel_0_ : DoubleVector3, mu_ : float) -> void:
+func _init(name_ : StringName, pos_0_ : DoubleVector3, vel_0_ : DoubleVector3, mu_ : float) -> void:
 	name = name_
 	pos_0 = pos_0_
 	vel_0 = vel_0_
@@ -106,6 +106,7 @@ func _init(name_ : String, pos_0_ : DoubleVector3, vel_0_ : DoubleVector3, mu_ :
 ## gravitor in the tree at the specified time. 
 ## SHOULD ONLY BE INVOKED ON THE ROOT GRAVITOR.
 func all_states_at_time(time : float) -> Dictionary:
+	
 	var output := {}
 	_tree_state_query_kernel(time, output, DoubleVector3.ZERO(), DoubleVector3.ZERO())
 	

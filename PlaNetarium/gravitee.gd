@@ -31,7 +31,7 @@ var state_fetch : Callable
 ## constitutes acceptable error. This criterion compares two states that are meant
 ## to be identical; timesteps will be as large as possible while satisfying it.
 var states_approx_equal : Callable = func(d_half : Array, full : Array) -> bool:
-	return d_half[0].equals_approx(full[0], 2.0)
+	return d_half[1].equals_approx(full[1], 1.0)
 
 
 
@@ -88,7 +88,12 @@ func state_at_time(time : float, update_cache : bool = false):
 	# 2c) Check if time is AFTER the long cache
 	elif qt >= long_cache.get_at(long_cache_tail)[0]:
 		# Follows cache; "we may eventually know but don't yet"
-		return 1
+		if long_cache_tail == (long_cache.length() - 1):
+			# No more cache space
+			return 2 # TODO UNDOC RETURN FORCE PROBLEM
+		else:
+			# More cache space; requested time may possibly be computed
+			return 1 # TODO UNDOC RETURN FORCE PROBLEM
 	
 	else:
 		# Requested time falls within the long cache
@@ -125,8 +130,16 @@ func state_at_time(time : float, update_cache : bool = false):
 
 
 # TODO doc
-func advance_cache():
-	pass # TODO do
+# TODO: REPLACE/CONTROL WITH GRAVITOR SWEEPLINE, If profitable!
+func advance_cache() -> void:
+	if long_cache_tail < (long_cache.length() - 1):
+		var tail_state = long_cache.get_at(long_cache_tail)
+		
+		# TODO coarseness criterion loop
+		var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
+		
+		long_cache_tail += 1
+		long_cache.set_at(long_cache_tail, next_state)
 
 
 
@@ -137,37 +150,39 @@ func advance_cache():
 # is as large as possible. The resulting state is guaranteed to be before or at the target
 # time provided. 
 func _smart_propagate(state : Array, target_time : int) -> Array:
-	
+
 	# 1) Check edge cases
 	var t : int = state[0]
-	if t <= target_time:
+	if t >= target_time:
 		return state # fail silently
-	
+
 	# 2) Establish a valid timestep that's as fast as possible while
 	#	 not overrunning the target time
-	var timestep : int = min(1, t & (~(t - 1))) # TODO: maximal jump at 0?
+	var timestep : int = max(1, t & (~(t - 1))) # TODO: maximal jump at 0?
 	while t + timestep > target_time:
+		@warning_ignore("integer_division")
 		timestep = int(timestep / 2)
-	
+
 	# 3) Halve the timestep until a propagation by it is equal to two
 	#	 propagations by its halves, plus or minus some error
 	var full_prop = quant_PEFRL(state, timestep)
 	while true:
-		
+
+		@warning_ignore("integer_division")
 		var half_step = int(timestep / 2)
 		if half_step == 0:
 			break			# We can't get any more fine; settle for what we have
-			
+
 		var half_prop = quant_PEFRL(state, half_step)
 		var double_half_prop = quant_PEFRL(half_prop, half_step)
-		
+
 		if states_approx_equal.call(double_half_prop, full_prop):
 			break			# A full step is equal to two half steps; no need to get finer
-		
+
 		# Otherwise halve the timestep and loop.
 		timestep = half_step
 		full_prop = half_prop
-	
+
 	return full_prop
 
 
@@ -204,7 +219,7 @@ func quant_PEFRL(state : Array, qdt : int) -> Array:
 	
 	var pos : DoubleVector3 = state[1].clone() # TODO we really need to get this discrepancy sorted, esp. vis. handbacks etc.
 	var vel : DoubleVector3 = state[2].clone() # Honestly the whole thing should be data-oriented C++
-	var dt := float(qdt)
+	var dt := float(qdt) * time_quantum
 	
 	# Begin PEFRL steps (loop unrolled -- why not, eh?)
 	pos = pos.add(vel.mul(xi * dt))
@@ -225,4 +240,4 @@ func quant_PEFRL(state : Array, qdt : int) -> Array:
 	vel = vel.add(acc.mul(dt * (0.5 - lambda)))
 	pos = pos.add(vel.mul(dt * xi))
 	
-	return [state[0] + dt, pos, vel]
+	return [state[0] + qdt, pos, vel]

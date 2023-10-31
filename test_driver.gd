@@ -2,7 +2,7 @@ extends Node3D
 
 # Test driver script
 
-var sponch : OldGravitee
+var sponch : Gravitee
 
 var sol : Gravitor
 var earth : Gravitor
@@ -12,6 +12,7 @@ var sim_time := 0.0
 
 var time_scale := 128000.0
 var space_scale := 1e-10
+var running := true
 
 var valid_tick_count = 0
 
@@ -22,45 +23,49 @@ func _process(delta):
 		time_scale *= 2.0
 	elif Input.is_action_just_pressed("ui_left"):
 		time_scale /= 2.0
+	if Input.is_action_just_pressed("ui_accept"):
+		running = not running
 	
+	if running:
 #	sim_time += time_scale * delta
 #	temp_move_planets(sim_time)
 	
-	var state = sponch.state_at_time(sim_time, true)
-	if is_instance_of(state, TYPE_INT):
-		if state == 1:
-			sponch.propagate_cache()
-			$Label.text = "propagating cache up to " + str(sponch.cache.get_at(sponch.tail)[0] * sponch.time_quantum)
-			
-		elif state == 2:
-			sponch.cache.shift_left(sponch.cache.length() - 1) # TODO: hadn't thought of this
-			sponch.tail = 0
-			$Label.text = "forcemoving cache head TODO"
+		var state = sponch.state_at_time(sim_time, true)
+		if is_instance_of(state, TYPE_INT):
+			if state == 1:
+				sponch.advance_cache()
+				$Label.text = "advancing cache up to " + str(sponch.long_cache.get_at(sponch.long_cache_tail)[0] * sponch.time_quantum)
+				
+			elif state == 2:
+				sponch.long_cache.shift_left(sponch.long_cache.length() - 1) # TODO: hadn't thought of this
+				sponch.long_cache_tail = 0
+				$Label.text = "forcemoving cache head TODO"
+			else:
+				$Label.text = "no data available, advancing anyway"
+				# Move fixed planets
+				temp_move_planets(sim_time)
+				# Advance time
+				sim_time += time_scale * delta
 		else:
-			#print("no data avail, advancing time anyway")
-			$Label.text = "no data available, advancing anyway"
-			sim_time += time_scale * delta
-
+			$Label.text = "valid tick"
+			valid_tick_count += 1
+			
 			# Move fixed planets
 			temp_move_planets(sim_time)
-	else:
-		#print(sim_time, ": ", state)
-		$Label.text = "valid tick"
-		valid_tick_count += 1
-		sim_time += delta * time_scale
-		# Move fixed planets
-		temp_move_planets(sim_time)
-		# Move sponch
-		$TestTarget3.global_position = state[0].vec3() * space_scale
+			# Move sponch
+			$TestTarget3.global_position = state[0].vec3() * space_scale
+			
+			# Advance sim time
+			sim_time += delta * time_scale
+			
+		$Label.text = $Label.text + "\ncache tail: "+str(sponch.long_cache.get_at(sponch.long_cache_tail)[0] * sponch.time_quantum)+"\ncurrent time: "+ str(sim_time) + " (" +str(sim_time/60.0/60.0)+ " hours)" +"\nvalid ticks: " + str(valid_tick_count)# + "\ntimestep: " + str(sponch.timestep)
 		
-	$Label.text = $Label.text + "\ncache tail: "+str(sponch.cache.get_at(sponch.tail)[0] * sponch.time_quantum)+"\ncurrent time: "+ str(sim_time) +"\nvalid ticks: " + str(valid_tick_count) + "\ntimestep: " + str(sponch.timestep)
-	
-	# WITH REMAINING TIME IN THE TICK, PROPAGATE SPONCH'S CACHE.
-	for i in 256: # TODO time sensitivity
-		sponch.propagate_cache()
-	
-	# Move the prediction position shower
-	$SponchPrediction.global_position = (sponch.cache.get_at(sponch.tail)[1].vec3()) * space_scale
+		# WITH REMAINING TIME IN THE TICK, PROPAGATE SPONCH'S CACHE.
+		for i in 256: # TODO time sensitivity
+			sponch.advance_cache()
+		
+		# Move the prediction position shower
+		$SponchPrediction.global_position = (sponch.long_cache.get_at(sponch.long_cache_tail)[1].vec3()) * space_scale
 
 
 func temp_move_planets(time):
@@ -81,6 +86,6 @@ func _ready():
 	
 	#sponch = Gravitee.new(moon.pos_0.add(earth.pos_0), moon.vel_0.add(earth.vel_0), 0.0, sol.all_states_at_time)
 	#sponch = Gravitee.new(DoubleVector3.new(147461658472.428, 0, -535222439.85885), DoubleVector3.new(-156.266628704918, 0, -31359.6968614126), 0.0, sol.all_states_at_time)
-	sponch = OldGravitee.new(lunar_global[0], lunar_global[1], 0.0, sol.all_states_at_time)
+	sponch = Gravitee.new(lunar_global[0], lunar_global[1], 0.0, sol.all_states_at_time)
 	#sponch = Gravitee.new(earth.pos_0.add(DoubleVector3.new(6628000, 0, 0)), earth.vel_0.add(DoubleVector3.new(0, 7750, 0)), 0.0, sol.all_states_at_time)
 	#print(sol.all_states_at_time(0.0))

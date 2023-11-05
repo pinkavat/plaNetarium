@@ -4,10 +4,6 @@ class_name Gravitee
 ## Body subject to the influence of gravity sources (a satellite).
 ##
 ## TODO: document
-## TODO: ISOLATE STATE. It's got too many parts referenced by index alone.
-## perhaps we'd do better with a specific OBJECT, and SAVE ON DOUBLEVEC OVERHEAD
-## by FOLDING ALL THE FLOATS TOGETHER, then CONVERTING OUT ON REQUEST.
-## Something to consider later perhaps?
 
 
 
@@ -17,7 +13,7 @@ class_name Gravitee
 static var time_quantum : float = 0.01	# TODO TODO: spec and setting (in init or not?)
 
 
-## The long cache; stores [time quantum, pos doublevec, vel doublevec] "tuples".
+## The long cache; stores integration states of State type (inner class below).
 ## Called 'long' because unlike previous PlaNetarium prototypes, this one isn't
 ## exhaustive over local valid timesteps. We throw out and recompute intermediate
 ## steps to show a larger timespan. Note that the long cache is still CANONICAL.
@@ -35,8 +31,8 @@ var state_fetch : Callable
 ## In order for the smart propagator (below) to function, it needs to know what
 ## constitutes acceptable error. This criterion compares two states that are meant
 ## to be identical; timesteps will be as large as possible while satisfying it.
-var states_approx_equal : Callable = func(d_half : Array, full : Array) -> bool:
-	return d_half[1].equals_approx(full[1], 1.0) # position within a meter
+var states_approx_equal : Callable = func(d_half : State, full : State) -> bool:
+	return d_half.get_pos().equals_approx(full.get_pos(), 1.0) # position within a meter
 
 
 
@@ -57,7 +53,7 @@ func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float,
 	
 	# Set up the long cache with initial state data
 	long_cache = RingBuffer.new(long_cache_size)
-	long_cache.set_at(0, [time_quant_0, pos_0.clone(), vel_0.clone()])
+	long_cache.set_at(0, State.new(time_quant_0, pos_0, vel_0))
 	long_cache_tail = 0
 
 
@@ -84,16 +80,16 @@ func state_at_time(time : float, update_cache : bool = false):
 	var preceding_cache_index : int
 	
 	# 2a) Special check: see if the time is in the first cache slot
-	if long_cache_tail > 0 and (qt >= long_cache.get_at(0)[0] and qt < long_cache.get_at(1)[0]):
+	if long_cache_tail > 0 and (qt >= long_cache.get_at(0).qtime and qt < long_cache.get_at(1).qtime):
 		preceding_cache_index = 0
 	
 	# 2b) Check if time is BEFORE the long cache
-	elif qt < long_cache.get_at(0)[0]:
+	elif qt < long_cache.get_at(0).qtime:
 		# Precedes cache; "can't ever know"
 		return 0
 	
 	# 2c) Check if time is AFTER the long cache
-	elif qt >= long_cache.get_at(long_cache_tail)[0]:
+	elif qt >= long_cache.get_at(long_cache_tail).qtime:
 		# Follows cache; "we may eventually know but don't yet"
 		
 		if long_cache_tail == (long_cache.length() - 1) and update_cache:
@@ -112,7 +108,7 @@ func state_at_time(time : float, update_cache : bool = false):
 		while(bsearch_left < bsearch_right):
 			@warning_ignore("integer_division") # Dear me, Godot, dear me.
 			var mid = int((bsearch_right - bsearch_left) / 2) + bsearch_left + 1
-			if qt >= long_cache.get_at(mid)[0]:
+			if qt >= long_cache.get_at(mid).qtime:
 				bsearch_left = mid
 			else:
 				bsearch_right = mid - 1
@@ -120,8 +116,8 @@ func state_at_time(time : float, update_cache : bool = false):
 	
 	# 4) If we've reached this point, preceding_cache_index is validly set.
 	#    smart_propagate forward from it until we hit the desired time.
-	var state : Array = long_cache.get_at(preceding_cache_index)
-	while(state[0] < qt):
+	var state : State = long_cache.get_at(preceding_cache_index)
+	while(state.qtime < qt):
 		state = _smart_propagate(state, qt)
 		# TODO safety valve?
 	
@@ -134,7 +130,7 @@ func state_at_time(time : float, update_cache : bool = false):
 		long_cache.set_at(0, state)
 	
 	# 6) Reformat and return
-	return [state[1], state[2]]
+	return [state.get_pos(), state.get_vel()]
 
 
 # TODO doc
@@ -146,7 +142,7 @@ func advance_cache() -> void:
 		
 		var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
 		
-		if long_cache_tail <= 0 or (not long_cache.get_at(long_cache_tail)[1].equals_approx(long_cache.get_at(long_cache_tail - 1)[1], 1_000_000_000.0)):
+		if long_cache_tail <= 0 or (not long_cache.get_at(long_cache_tail).get_pos().equals_approx(long_cache.get_at(long_cache_tail - 1).get_pos(), 1_000_000_000.0)):
 			# Not enough items OR coarseness criterion satisfied: add the state to the cache.
 			long_cache_tail += 1
 		# Otherwise coarseness criterion failed, and no need to add: replace the tail.
@@ -160,10 +156,10 @@ func advance_cache() -> void:
 # viable timestep. This function does so: it advances the given state by one timestep that
 # is as large as possible. The resulting state is guaranteed to be before or at the target
 # time provided. 
-func _smart_propagate(state : Array, target_time : int) -> Array:
+func _smart_propagate(state : State, target_time : int) -> State:
 	
 	# 1) Check edge cases
-	var t : int = state[0]
+	var t : int = state.qtime
 	if t >= target_time:
 		return state # fail silently
 
@@ -205,12 +201,12 @@ func _smart_propagate(state : Array, target_time : int) -> Array:
 #
 # Omelyan, Igor & Mryglod, Ihor & Reinhard, Folk. (2002). "Optimized Forest-Ruth- and Suzuki-like algorithms for integration of 
 # motion in many-body systems". Computer Physics Communications. 146. 188. 10.1016/S0010-4655(02)00451-4. 
-func quant_PEFRL(state : Array, qdt : int) -> Array:
+func quant_PEFRL(state : State, qdt : int) -> State:
 	
 	# Get Gravitor state at time
 	# TODO time consideration: 'before' or 'after'? Or is it OK as-is?
 	# TODO or even time-slice (that'd be abysmal performance-wise!)
-	var gravitors = state_fetch.call(float(state[0]) * time_quantum)
+	var gravitors = state_fetch.call(float(state.qtime) * time_quantum)
 	
 	var get_acceleration = func _gravity_get(pos : DoubleVector3) -> DoubleVector3:
 		var acc = DoubleVector3.ZERO() # TODO nomenclt.
@@ -228,11 +224,11 @@ func quant_PEFRL(state : Array, qdt : int) -> Array:
 	const lambda = -0.2123418310626054
 	const chi = -0.06626458266981849
 	
-	var pos : DoubleVector3 = state[1].clone() # TODO we really need to get this discrepancy sorted, esp. vis. handbacks etc.
-	var vel : DoubleVector3 = state[2].clone() # Honestly the whole thing should be data-oriented C++
+	var pos : DoubleVector3 = state.get_pos() # yay! ameliorated the cloning!
+	var vel : DoubleVector3 = state.get_vel()
 	var dt := float(qdt) * time_quantum
 	
-	# Begin PEFRL steps (loop unrolled -- why not, eh?)
+	# Begin PEFRL steps
 	pos = pos.add(vel.mul(xi * dt))
 	
 	var acc = get_acceleration.call(pos) # "Update forces" pass
@@ -251,4 +247,43 @@ func quant_PEFRL(state : Array, qdt : int) -> Array:
 	vel = vel.add(acc.mul(dt * (0.5 - lambda)))
 	pos = pos.add(vel.mul(dt * xi))
 	
-	return [state[0] + qdt, pos, vel]
+	return State.new(state.qtime + qdt, pos, vel)
+
+
+
+# ========== INTERNAL STATE CLASS ==========
+
+## State class used internally (stored in the long cache, etc.)
+## to alleviate memory footprint and clarify names.
+class State extends RefCounted:
+	
+	# Simulation time quantum of this state. Directly accessible.
+	var qtime : int
+	
+	# Position and Velocity data. Read-only, access via getters below.
+	# Experimentation suggests that the memory footprint of six floats in one
+	# object is half of two DoubleVec objects. Fair enough, so we unroll them:
+	var _pos_x : float
+	var _pos_y : float
+	var _pos_z : float
+	var _vel_x : float
+	var _vel_y : float
+	var _vel_z : float
+	
+	## Don't set state members. If we need to change them, just make a new state:
+	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3):
+		qtime = qtime_
+		_pos_x = pos_.x
+		_pos_y = pos_.y
+		_pos_z = pos_.z
+		_vel_x = vel_.x
+		_vel_y = vel_.y
+		_vel_z = vel_.z
+	
+	## Position getter; Doublevec is brand-new
+	func get_pos() -> DoubleVector3:
+		return DoubleVector3.new(_pos_x, _pos_y, _pos_z)
+	
+	## Velocity getter; Doubelvec is brand-new
+	func get_vel() -> DoubleVector3:
+		return DoubleVector3.new(_vel_x, _vel_y, _vel_z)

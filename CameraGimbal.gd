@@ -17,7 +17,8 @@ var zoom_speed_gesture := 1.0
 var move_time := 0.5
 
 # TODO: dynamic (or a least parametrized as exposed!)
-var min_zoom := 1.5
+# Also TODO: weird camera nearplane to compensate for ridiculous factors
+var min_zoom := 0.01
 var max_zoom := 100.0
 
 

@@ -110,6 +110,13 @@ func temp_move_planets(time):
 func _ready():
 	sol = Gravitor.make_root_gravitor("sol", 1.327e20)
 	earth = sol.add_child_from_apsides("earth", 3.986e14, 147.1e9, 152.1e9)
+	$TestTarget2.scale *= space_scale * 6_371_000.0 * 2.0
+	$TestTarget3.scale = $TestTarget2.scale
+	
+	$CameraGimbal/Camera3D.position.z = $CameraGimbal.min_zoom * 10.0
+	$CameraGimbal._start_move_towards($TestTarget2)
+	$CameraGimbal.move_amount = 0.0
+	
 	#moon = earth.add_child_from_apsides("moon", 4.905e12, 363e6, 405e6)
 	
 	var lunar_orbit := UniversalKepler.initial_conditions_from_apsides(3.986e14, 363e6, 405e6)
@@ -120,3 +127,7 @@ func _ready():
 	sponch = Gravitee.new(lunar_global[0], lunar_global[1], 0.0, cached_gravitor_query)
 	#sponch = Gravitee.new(earth.pos_0.add(DoubleVector3.new(6628000, 0, 0)), earth.vel_0.add(DoubleVector3.new(0, 7750, 0)), 0.0, sol.all_states_at_time)
 	#print(sol.all_states_at_time(0.0))
+	
+	var orbit_line = OrbitPolyline.new(sponch.long_cache.length(), space_scale)
+	sponch.long_cache.added_item.connect(orbit_line.add_point)
+	add_child(orbit_line)

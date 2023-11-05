@@ -4,12 +4,17 @@ class_name Gravitee
 ## Body subject to the influence of gravity sources (a satellite).
 ##
 ## TODO: document
+## TODO: ISOLATE STATE. It's got too many parts referenced by index alone.
+## perhaps we'd do better with a specific OBJECT, and SAVE ON DOUBLEVEC OVERHEAD
+## by FOLDING ALL THE FLOATS TOGETHER, then CONVERTING OUT ON REQUEST.
+## Something to consider later perhaps?
+
 
 
 ## In order to allow caching of Gravitor state, Gravitees compute their states at
 ## integer time quanta, to increase the chance that two Gravitees will share times.
 ## This value specifies the amount of simulation time per time quantum
-var time_quantum : float = 0.01	# TODO TODO: spec and setting (in init or not?)
+static var time_quantum : float = 0.01	# TODO TODO: spec and setting (in init or not?)
 
 
 ## The long cache; stores [time quantum, pos doublevec, vel doublevec] "tuples".
@@ -141,7 +146,7 @@ func advance_cache() -> void:
 		
 		var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
 		
-		if long_cache_tail <= 0 or (not long_cache.get_at(long_cache_tail)[1].equals_approx(long_cache.get_at(long_cache_tail - 1)[1], 100_000_000.0)):
+		if long_cache_tail <= 0 or (not long_cache.get_at(long_cache_tail)[1].equals_approx(long_cache.get_at(long_cache_tail - 1)[1], 1_000_000_000.0)):
 			# Not enough items OR coarseness criterion satisfied: add the state to the cache.
 			long_cache_tail += 1
 		# Otherwise coarseness criterion failed, and no need to add: replace the tail.

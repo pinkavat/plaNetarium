@@ -209,14 +209,14 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	var gravitors = state_fetch.call(float(state.qtime) * time_quantum)
 	
 	var get_acceleration = func _gravity_get(pos : DoubleVector3) -> DoubleVector3:
-		var acc = DoubleVector3.ZERO() # TODO nomenclt.
+		var f = DoubleVector3.ZERO()
 		for gravitor in gravitors.values():
-			var rel_pos := pos.sub(gravitor[0]) # 0 : gravitor position
+			
+			var rel_pos : DoubleVector3 = gravitor[0].sub(pos) # 0 :gravitor pos
 			var rel_pos_dot := rel_pos.dot(rel_pos)
-			var grav_mag : float = gravitor[2] / rel_pos_dot # 2: gravitor mu
-			var acc_normal = rel_pos.div(-sqrt(rel_pos_dot))
-			acc = acc.add(acc_normal.mul(grav_mag))
-		return acc # TODO mass term...?
+			f = f.add(rel_pos.mul(gravitor[2] / (rel_pos_dot * sqrt(rel_pos_dot)))) # 2 : gravitor mu
+			
+		return f # TODO mass term...?
 	
 	
 	# Run PEFRL core
@@ -259,6 +259,8 @@ class State extends RefCounted:
 	
 	# Simulation time quantum of this state. Directly accessible.
 	var qtime : int
+	
+	
 	
 	# Position and Velocity data. Read-only, access via getters below.
 	# Experimentation suggests that the memory footprint of six floats in one

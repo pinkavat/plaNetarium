@@ -86,6 +86,6 @@ func add_point(index : int, data):
 		_next_positions[backing_prior_in_next + bi + 2] = pos.z
 		bi += 3
 		
-		_colours[backing_prior_index + i] = Color.AQUA
+		_colours[backing_prior_index + i] = Color.AQUA if data.primary.name == &"earth" else Color.ORANGE
 	
 	_recommit_mesh()

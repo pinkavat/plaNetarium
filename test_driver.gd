@@ -73,9 +73,9 @@ func _process(delta):
 			# Advance sim time
 			sim_time += delta * time_scale
 			
-		$Label.text = $Label.text + "\ncache tail: "+str(sponch.long_cache.get_at(sponch.long_cache_tail).qtime * sponch.time_quantum)+"\n("+str(sponch.long_cache_tail)+"/"+str(sponch.long_cache.length())+")"+"\ncurrent time: "+ str(sim_time) + " (" +str(sim_time/60.0/60.0)+ " hours)" +"\nvalid ticks: " + str(valid_tick_count)# + "\ntimestep: " + str(sponch.timestep)
+		#$Label.text = $Label.text + "\ncache tail: "+str(sponch.long_cache.get_at(sponch.long_cache_tail).qtime * sponch.time_quantum)+"\n("+str(sponch.long_cache_tail)+"/"+str(sponch.long_cache.length())+")"+"\ncurrent time: "+ str(sim_time) + " (" +str(sim_time/60.0/60.0)+ " hours)" +"\nvalid ticks: " + str(valid_tick_count)# + "\ntimestep: " + str(sponch.timestep)
 		$Label.text = $Label.text + "\ngravitor cache hit/miss rate: " + str(float(cache_hits)/float(cache_misses))
-		
+		$Label.text = $Label.text + "\ncurrent primary: " + str(sponch.long_cache.get_at(0).primary.name)
 		
 		# WITH REMAINING TIME IN THE TICK, PROPAGATE SPONCH'S CACHE.
 		current_tick_budget -= Time.get_ticks_usec() - tick_start_time
@@ -104,8 +104,7 @@ func temp_move_planets(time):
 		# Get state
 		var state := sol.all_states_at_time(time)
 		
-		$TestTarget2.global_position = (state["earth"][0].vec3()) * space_scale
-		#$TestTarget3.global_position = (state["moon"][0].vec3()) * space_scale
+		$TestTarget2.global_position = (state["earth"].get_pos().vec3()) * space_scale
 
 func _ready():
 	sol = Gravitor.make_root_gravitor("sol", 1.327e20)

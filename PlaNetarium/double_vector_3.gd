@@ -32,8 +32,8 @@ static func ZERO() -> DoubleVector3:
 	return DoubleVector3.new(0, 0, 0)
 
 ## Cloning (hmmm...).
-func clone() -> DoubleVector3:
-	return DoubleVector3.new(x, y, z)
+#func clone() -> DoubleVector3:
+#	return DoubleVector3.new(x, y, z)
 
 
 ## Equality check, using engine equality.

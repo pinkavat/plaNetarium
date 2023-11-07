@@ -7,6 +7,10 @@ extends RefCounted
 ## TODO: Essentially outmoded; kepler should be simpler thing based
 ## directly on orbital elements.
 ##
+## TODO: not to mention that we've obviated Array returns in favour of
+## specialized internal classes. The whole logic should be folded into
+## Gravitor anyway if it gets simple enough.
+##
 ## Copy of the old Patched Conics Universal Kepler Utility
 ## tweaked for double-precision
 ##

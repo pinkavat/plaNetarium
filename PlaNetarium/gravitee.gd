@@ -4,6 +4,10 @@ class_name Gravitee
 ## Body subject to the influence of gravity sources (a satellite).
 ##
 ## TODO: document
+## TODO: gravitor query: time quant or time actual? If time quant, quantum should
+##       be for the PLANETARIUM ENTIRE, right?
+## TODO: linking into plaNetarium: 'primary' is set by an SOI check, which doesn't
+##		 fall back to the system root and SHOULD.
 
 
 
@@ -28,12 +32,11 @@ var long_cache_tail : int
 var state_fetch : Callable
 
 
-## In order for the smart propagator (below) to function, it needs to know what
-## constitutes acceptable error. This criterion compares two states that are meant
-## to be identical; timesteps will be as large as possible while satisfying it.
-var states_approx_equal : Callable = func(d_half : State, full : State) -> bool:
-	return d_half.get_pos().equals_approx(full.get_pos(), 1.0) # position within a meter
 
+## TODO: experimental. Obtain the admissible error for a given primary.
+## TODO should be a property of the gravitor, like the acceptable jump
+func admissible_error_of(primary : Gravitor) -> float:
+	return 1.0 # TODO
 
 
 ## Initialize a new Gravitee, with an initial Cartesian state (position and velocity) at
@@ -51,9 +54,21 @@ func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float,
 	# that the state is the same at the first time quantum.
 	var time_quant_0 = int(time_0 / time_quantum)
 	
+	# Perform an initial check to get our primary gravitor
+	# TODO: this is duplicate code of the pass in PEFRL below!
+	var primary : Gravitor = null
+	var min_rel := INF
+	for gravitor_state in state_fetch.call(float(time_quant_0) * time_quantum).values():
+		var rel_pos : DoubleVector3 = gravitor_state.get_pos().sub(pos_0)
+		var rel_pos_dot := rel_pos.dot(rel_pos)
+		if rel_pos_dot < gravitor_state.gravitor.soi_radius_squared and rel_pos_dot < min_rel:
+			min_rel = rel_pos_dot
+			primary = gravitor_state.gravitor
+		
+	
 	# Set up the long cache with initial state data
 	long_cache = RingBuffer.new(long_cache_size)
-	long_cache.set_at(0, State.new(time_quant_0, pos_0, vel_0))
+	long_cache.set_at(0, State.new(time_quant_0, pos_0, vel_0, primary))
 	long_cache_tail = 0
 
 
@@ -134,7 +149,7 @@ func state_at_time(time : float, update_cache : bool = false):
 
 
 # TODO doc
-# TODO: coarseness metric
+# TODO: finalize/stabilize coarseness metric
 # TODO: don't forget gravitor sweepline idea (it'd be higher up)
 func advance_cache() -> void:
 	if long_cache_tail < (long_cache.length() - 1):
@@ -142,7 +157,22 @@ func advance_cache() -> void:
 		
 		var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
 		
-		if long_cache_tail <= 0 or (not long_cache.get_at(long_cache_tail).get_pos().equals_approx(long_cache.get_at(long_cache_tail - 1).get_pos(), 1_000_000_000.0)):
+		
+		# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
+		# TODO: so we approximate it, by guesstimating an 'average orbital period of a satellite'
+		# which is a fixed gravitor proprerty; if it works, set it in the gravitor initializer.
+		
+		var synth_semim = tail_state.primary.soi_radius / 2.0
+		var estim_period = TAU * sqrt((synth_semim * synth_semim * synth_semim) / tail_state.primary.mu)
+		
+		estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0)
+		
+		@warning_ignore("narrowing_conversion")
+		var admissible_jump =  (estim_period / 256.0) / (time_quantum) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
+		
+		
+		#if long_cache_tail <= 0 or (not tail_state.get_pos().equals_approx(long_cache.get_at(long_cache_tail - 1).get_pos(), 1_000_000_000.0)):
+		if long_cache_tail <= 0 or (abs(tail_state.qtime - long_cache.get_at(long_cache_tail - 1).qtime) > admissible_jump):
 			# Not enough items OR coarseness criterion satisfied: add the state to the cache.
 			long_cache_tail += 1
 		# Otherwise coarseness criterion failed, and no need to add: replace the tail.
@@ -165,7 +195,7 @@ func _smart_propagate(state : State, target_time : int) -> State:
 
 	# 2) Establish a valid timestep that's as fast as possible while
 	#	 not overrunning the target time
-	var timestep : int = max(1, t & (~(t - 1))) # TODO: maximal jump at 0?
+	var timestep : int = max(1, t & (~(t - 1)))
 	while t + timestep > target_time:
 		@warning_ignore("integer_division")
 		timestep = int(timestep / 2)
@@ -183,7 +213,9 @@ func _smart_propagate(state : State, target_time : int) -> State:
 		var half_prop = quant_PEFRL(state, half_step)
 		var double_half_prop = quant_PEFRL(half_prop, half_step)
 
-		if states_approx_equal.call(double_half_prop, full_prop):
+		# Establish whether a full prop and two half props result in sufficiently similar state
+		var admissible_error = min(admissible_error_of(double_half_prop.primary), admissible_error_of(full_prop.primary))
+		if double_half_prop.get_pos().equals_approx(full_prop.get_pos(), admissible_error):
 			break			# A full step is equal to two half steps; no need to get finer
 
 		# Otherwise halve the timestep and loop.
@@ -208,16 +240,28 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	# TODO or even time-slice (that'd be abysmal performance-wise!)
 	var gravitors = state_fetch.call(float(state.qtime) * time_quantum)
 	
+	# TODO: INSERT THIS AS PART OF ONE OF THE FORCE PASSES.
+	var primary : Gravitor = null
+	var min_rel := INF
+	for gravitor_state in gravitors.values():
+		var rel_pos : DoubleVector3 = gravitor_state.get_pos().sub(state.get_pos())
+		var rel_pos_dot := rel_pos.dot(rel_pos)
+		if rel_pos_dot < gravitor_state.gravitor.soi_radius_squared and rel_pos_dot < min_rel:
+			min_rel = rel_pos_dot
+			primary = gravitor_state.gravitor
+	
+	# TODO: other forces, externalization, etc.
 	var get_acceleration = func _gravity_get(pos : DoubleVector3) -> DoubleVector3:
 		var f = DoubleVector3.ZERO()
-		for gravitor in gravitors.values():
-			
-			var rel_pos : DoubleVector3 = gravitor[0].sub(pos) # 0 :gravitor pos
+		for gravitor_state in gravitors.values():
+			var rel_pos : DoubleVector3 = gravitor_state.get_pos().sub(pos)
 			var rel_pos_dot := rel_pos.dot(rel_pos)
-			f = f.add(rel_pos.mul(gravitor[2] / (rel_pos_dot * sqrt(rel_pos_dot)))) # 2 : gravitor mu
-			
+			f = f.add(rel_pos.mul(gravitor_state.gravitor.mu / (rel_pos_dot * sqrt(rel_pos_dot))))
+		
+		# TODO temp test accel
+		#f = f.add(state.get_vel().mul(0.0000001))
+		
 		return f # TODO mass term...?
-	
 	
 	# Run PEFRL core
 	const xi = 0.1786178958448091
@@ -247,11 +291,11 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	vel = vel.add(acc.mul(dt * (0.5 - lambda)))
 	pos = pos.add(vel.mul(dt * xi))
 	
-	return State.new(state.qtime + qdt, pos, vel)
+	return State.new(state.qtime + qdt, pos, vel, primary)
 
 
 
-# ========== INTERNAL STATE CLASS ==========
+# ========== STATE CLASS ==========
 
 ## State class used internally (stored in the long cache, etc.)
 ## to alleviate memory footprint and clarify names.
@@ -260,7 +304,8 @@ class State extends RefCounted:
 	# Simulation time quantum of this state. Directly accessible.
 	var qtime : int
 	
-	
+	# Gravitor exerting the strongest gravity on the Gravitee at this time.
+	var primary : Gravitor
 	
 	# Position and Velocity data. Read-only, access via getters below.
 	# Experimentation suggests that the memory footprint of six floats in one
@@ -273,8 +318,9 @@ class State extends RefCounted:
 	var _vel_z : float
 	
 	## Don't set state members. If we need to change them, just make a new state:
-	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3):
+	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3, primary_ : Gravitor):
 		qtime = qtime_
+		primary = primary_
 		_pos_x = pos_.x
 		_pos_y = pos_.y
 		_pos_z = pos_.z

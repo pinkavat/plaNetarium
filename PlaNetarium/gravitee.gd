@@ -91,7 +91,7 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, qtime_0 : int):
 ##		("we don't know and can't ever")
 ##	- if the requested time is BEYOND the last cached time, returns integer 1
 ##		("we don't know, but might eventually")
-##	- if the requested time falls WITHIN the cache, returns [pos doublevec, vel doublevec]
+##	- if the requested time falls WITHIN the cache, returns a State object
 ##
 ## if update_cache is true, the cache head will move:
 ##	- if the request fell within the cache, the head will move to the quantum preceding
@@ -157,8 +157,7 @@ func state_at_time(time : float, update_cache : bool = false):
 		long_cache_tail -= preceding_cache_index
 		long_cache.set_at(0, state)
 	
-	# 6) Reformat and return
-	return [state.get_pos(), state.get_vel()]
+	return state
 
 
 # TODO doc

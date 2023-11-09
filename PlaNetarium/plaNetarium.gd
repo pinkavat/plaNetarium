@@ -10,19 +10,12 @@ class_name PlaNetarium
 ## use their StringNames and the functions provided here.
 ##
 ## TODO: document.
+## Document an example loop, with running do_background_work.
 
 
 ## In order to keep the caches patent, simulation is discrete. 
 ## TODO: setting etc.
 var time_quantum := 1.0e-2
-
-
-## The simulation uses an internal double-precision vector type to simplify
-## computations (DoubleVector3). We don't want to expose the burden of its
-## interface to a user, as Godot doesn't allow overriding operators. Hence,
-## returned state is in single-precision Vector3s, and to maximize accuracy we
-## scale the vectors down to the desired reduced size before shrinking them.
-var space_scale := 1.0e-10
 
 
 # ========== READING FROM THE SIMULATION ==========
@@ -35,7 +28,6 @@ class State extends RefCounted:
 	## Simulation time of the state, in seconds. 
 	var time : float
 	
-	
 	## Simulation time of the state, in time quanta (see above).
 	var qtime : int
 	
@@ -44,7 +36,14 @@ class State extends RefCounted:
 	## value given if the body doesn't exist or doesn't have a state at the 
 	## requested time (if the time precedes or succeeds its data, say).
 	func get_pos_of(name : StringName, fallback = null):
-		return fallback # TODO WHAT DO IF NOT AT STATE???????????
+		# Check large bodies
+		var large_body = _large_states.get(name, null)
+		if large_body:
+			return large_body.get_pos().vec3() # Gravitor.GlobalState
+		var small_body = _small_states.get(name, null)
+		if small_body:
+			return small_body.get_pos().vec3() # Gravitee.State (TODO)
+		return fallback
 	
 	
 	## Returns the velocity Vector3 of the named body, or null, as in get_pos_of.
@@ -59,21 +58,59 @@ class State extends RefCounted:
 	
 	
 	# Internal stuff; don't touch from without.
-	var _large_states : Dictionary
-	var _small_states : Dictionary
+	var _large_states : Dictionary # name -> Gravitor.GlobalState
+	var _small_states : Dictionary # name -> Gravitee.State (TODO temp)
 
 
 
 ## Non-updating time-query function, used to foresee what the future will hold.
 func peek_at_time(time : float) -> State:
-	return null # TODO
+	var state = _new_state_with_large_bodies(time)
+	
+	# TODO TODO TODO small bodies
+	
+	return state
 
 
-## Updating time-query function, used to advance the simulation.
+## Updating time-query function, used to advance the simulation. If any small body in the
+## simulation responds to its query by saying that it hasn't reached the requested point but will,
+## the function will return null. Hence, if null is received, the user waits, running do_background_work,
+## until the simulation propagates to the desired point, whereupon a valid State will be returned
 func move_to_time(time : float) -> State:
-	return null # TODO
+	var state = _new_state_with_large_bodies(time)
+	
+	# TODO POSSIBLE BUG: I *think* we're safe? If some gravitees are valid, and some are not
+	# the valid ones will update their caches and move the heads. They'll then receive a
+	# query for the same *time*. This shouldn't be a problem but might be!
+	# IN FACT: we could *FREEZE* the gravitees that are 'up to date', perhaps?
+	
+	# TODO temp, for bodies, not gravitees
+	for gravitee_name in _small_bodies:
+		var gravitee_state = _small_bodies[gravitee_name].state_at_time(time, true)
+		if is_instance_of(gravitee_state, TYPE_INT):
+			if gravitee_state == 1:
+				# waits.
+				return null
+			else:
+				# precedes; does not report but does not prevent
+				pass
+		else:
+			# valid; add to output
+			state._small_states[gravitee_name] = gravitee_state
+	
+	return state
 
-# TODO: cache advance
+
+# Auxiliary for the above, since large bodies don't care about propagation and can
+# be sampled backwards and forwards
+func _new_state_with_large_bodies(time : float) -> State:
+	# TODO QUANTIZE?
+	var state = State.new()
+	
+	state._large_states = cached_gravitor_query(time)
+	
+	return state
+
 
 
 # ========== WRITING TO THE SIMULATION ==========
@@ -81,8 +118,8 @@ func move_to_time(time : float) -> State:
 ## Initializer requires a name and a gravitational parameter (G * M) for the 
 ## root attractor of the system (as it's a fallback for various things)
 func _init(root_name : StringName, root_mu : float):
-	_root = root_name
-	_large_bodies[_root] = Gravitor.new(root_name, DoubleVector3.ZERO(), DoubleVector3.ZERO(), root_mu)
+	_root_name = root_name
+	_large_bodies[_root_name] = Gravitor.new(root_name, DoubleVector3.ZERO(), DoubleVector3.ZERO(), root_mu)
 
 
 ## Add a large body (emits gravity, moves in Keplerian orbit).
@@ -109,7 +146,8 @@ func _init(root_name : StringName, root_mu : float):
 ##			time_since_peri [float]: time elapsed between body at periapsis and orbit's reference time zero
 ##		}
 func add_large_body(name : StringName, parent_name : StringName, parameters : Dictionary, orbit : Dictionary):
-	assert(not name in _large_bodies, "Large body names must be unique!")
+	assert(not name in _large_bodies, "Body names must be unique!")
+	assert(not name in _small_bodies, "Body names must be unique!")
 	assert(parent_name in _large_bodies, "Parent not found!")
 	
 	assert("mu" in parameters, "Must specify mu parameter")
@@ -158,7 +196,44 @@ func add_large_body(name : StringName, parent_name : StringName, parameters : Di
 
 
 # TODO: small body creators, controllable vs uncontrollable (one 'tee or many)
+## TODO: temporary small-body adder for maintain func test.
+## TODO note: time-ref concerns; Double-precision not to be exposed!
+func temp_add_small_body(name : StringName, pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
+	assert(not name in _large_bodies, "Body names must be unique!")
+	assert(not name in _small_bodies, "Body names must be unique!")
+	
+	_small_bodies[name] = Gravitee.new(pos_0, vel_0, time_0, cached_gravitor_query)
+	return _small_bodies[name] # TODO only needful 'cause we haven't set up connectors yet for the orbitline
+
+
 # TODO: small body force modification.
+
+
+
+# ========== RUNNING THE SIMULATION ==========
+
+## Invoke with a time budget in milliseconds. The simulation will do its background
+## cache-advancing, etcetera, within said budget, and return what it didn't use.
+func do_background_work(time_budget_usec : int) -> int:
+	var last_time = Time.get_ticks_usec()
+	
+	# TODO gravitor sweepline algorithm
+	for i in 2048: # TODO fallback
+		
+		# TODO temp
+		for gravitee in _small_bodies.values():
+			gravitee.advance_cache() # at least once TODO: make it return false if no work and stop early!
+			
+		var cur_time = Time.get_ticks_usec()
+			
+		time_budget_usec -= (cur_time - last_time)
+		if time_budget_usec <= 0:
+			break
+			
+		last_time = cur_time
+	
+	return max(0, time_budget_usec)
+
 
 
 # ========== INNARDS ==========
@@ -168,4 +243,24 @@ func add_large_body(name : StringName, parent_name : StringName, parameters : Di
 var _large_bodies := {}
 
 # Name of the root large body.
-var _root : StringName
+var _root_name : StringName
+
+# TODO: temp internals
+var _small_bodies := {}
+
+
+# TODO Temporary caching scheme (copied from test code)
+# TODO QUANTIZE
+var _last_queried_time := -1.0
+var _cached_gravitors : Dictionary
+var _cache_misses : int = 0
+var _cache_hits : int = 0
+func cached_gravitor_query(time : float) -> Dictionary:
+	if not (time == _last_queried_time):
+		# Cache miss
+		_last_queried_time = time
+		_cached_gravitors = _large_bodies[_root_name].all_states_at_time(time)
+		_cache_misses += 1
+	else:
+		_cache_hits += 1
+	return _cached_gravitors

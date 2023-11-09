@@ -5,6 +5,8 @@ class_name OrbitPolyline
 ##
 ## TODO doc
 
+# TODO: still got some bugs of line segments being 'left behind'.
+
 
 var size : int	# TODO
 var space_scale : float # TODO 

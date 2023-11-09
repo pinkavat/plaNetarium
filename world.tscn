@@ -100,5 +100,6 @@ offset_bottom = 23.0
 
 [node name="Reticle" type="MeshInstance3D" parent="."]
 transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
+visible = false
 mesh = SubResource("SphereMesh_g50c7")
 surface_material_override/0 = SubResource("StandardMaterial3D_wvxy7")

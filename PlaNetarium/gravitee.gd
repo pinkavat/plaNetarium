@@ -5,7 +5,8 @@ class_name Gravitee
 ##
 ## TODO: document
 ## TODO: gravitor query: time quant or time actual? If time quant, quantum should
-##       be for the PLANETARIUM ENTIRE, right?
+##       be for the PLANETARIUM ENTIRE, right? If so, initializaztion, reset, etc.
+##		 should all be in quantum terms. right now they're inconsistent.
 ## TODO: linking into plaNetarium: 'primary' is set by an SOI check, which doesn't
 ##		 fall back to the system root and SHOULD.
 
@@ -54,25 +55,37 @@ func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float,
 	# that the state is the same at the first time quantum.
 	var time_quant_0 = int(time_0 / time_quantum)
 	
-	# Perform an initial check to get our primary gravitor
+	# Set up the long cache
+	long_cache = RingBuffer.new(long_cache_size)
+	long_cache_tail = 0
+	
+	# Invoke the resetter to set initial state
+	reset(pos_0, vel_0, time_quant_0)
+
+
+## Reset the Gravitee to a new initial Cartesian state and time. Essentially the
+## same thing as making a new Gravitee, but doesn't add memory burdens and invalidate
+## references.
+func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, qtime_0 : int):
+	# Perform a check to get our primary gravitor
 	# TODO: this is duplicate code of the pass in PEFRL below!
+	# (with all caveats thereto appertaining)
 	var primary : Gravitor = null
 	var min_rel := INF
-	for gravitor_state in state_fetch.call(float(time_quant_0) * time_quantum).values():
+	for gravitor_state in state_fetch.call(float(qtime_0) * time_quantum).values():
 		var rel_pos : DoubleVector3 = gravitor_state.get_pos().sub(pos_0)
 		var rel_pos_dot := rel_pos.dot(rel_pos)
 		if rel_pos_dot < gravitor_state.gravitor.soi_radius_squared and rel_pos_dot < min_rel:
 			min_rel = rel_pos_dot
 			primary = gravitor_state.gravitor
-		
 	
-	# Set up the long cache with initial state data
-	long_cache = RingBuffer.new(long_cache_size)
-	long_cache.set_at(0, State.new(time_quant_0, pos_0, vel_0, primary))
+	# Reset the long cache
+	long_cache.shift_left(long_cache_tail)
+	long_cache.set_at(0, State.new(qtime_0, pos_0, vel_0, primary))
 	long_cache_tail = 0
 
 
-## Get the Cartesian state of this gravitee at the given time (TODO quantum or no?)
+## Get the Cartesian state of this Gravitee at the given time (TODO quantum or no?)
 ## Will return the following:
 ##	- if the requested time PRECEDES any cached time, returns integer 0
 ##		("we don't know and can't ever")
@@ -110,7 +123,7 @@ func state_at_time(time : float, update_cache : bool = false):
 		if long_cache_tail == (long_cache.length() - 1) and update_cache:
 			# If it's an updating request and the cache is out of space, we have
 			# to flush the cache, or we'll get stuck.
-			long_cache.shift_left(long_cache.length() - 1)
+			long_cache.shift_left(long_cache_tail)
 			long_cache_tail = 0
 		return 1
 	
@@ -128,7 +141,7 @@ func state_at_time(time : float, update_cache : bool = false):
 			else:
 				bsearch_right = mid - 1
 		preceding_cache_index = bsearch_left
-	
+		
 	# 4) If we've reached this point, preceding_cache_index is validly set.
 	#    smart_propagate forward from it until we hit the desired time.
 	var state : State = long_cache.get_at(preceding_cache_index)
@@ -156,7 +169,6 @@ func advance_cache() -> void:
 		var tail_state = long_cache.get_at(long_cache_tail)
 		
 		var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
-		
 		
 		# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
 		# TODO: so we approximate it, by guesstimating an 'average orbital period of a satellite'
@@ -241,6 +253,7 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	var gravitors = state_fetch.call(float(state.qtime) * time_quantum)
 	
 	# TODO: INSERT THIS AS PART OF ONE OF THE FORCE PASSES.
+	# TODO: fallback to system root (primary never null)
 	var primary : Gravitor = null
 	var min_rel := INF
 	for gravitor_state in gravitors.values():

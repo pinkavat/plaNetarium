@@ -24,10 +24,8 @@ var children = []
 
 
 # ========== USEFUL PROPERTIES ==========
-# TODO: setting and computation once we've dispensed with the Kepler Utility
-# The values are fallback safeties for the root primary.
-# Right now the code for computing 'em is duplicated!
 
+# The values are fallback safeties for the root primary.
 var soi_radius : float = 7.4e12 # TODO: unsafe. Used in 'approx satellite period calc'; for root, this should be fixed high value.
 var soi_radius_squared : float = INF # TODO ditto, though this is used only in primary membership calc.
 var period : float = 10.0
@@ -36,7 +34,7 @@ var period : float = 10.0
 # Previous universal anomaly; cached for increased speed
 var prev_psi := 0.0
 
-
+## TODO destroy!
 ## Factory function: creates and adds a new Gravitor to the Gravitor tree from
 ## the given orbital parameters. Returns the new child for reference.
 func add_child_from_elements(
@@ -70,7 +68,7 @@ func add_child_from_elements(
 	
 	return child
 
-
+## TODO destroy!
 ## Factory function: creates and adds a new Gravitor to the Gravitor tree from
 ## the given apsides (a simplification of the above).
 func add_child_from_apsides(
@@ -102,7 +100,7 @@ func add_child_from_apsides(
 	
 	return child
 
-
+## TODO destroy!
 ## Static factory function: creates an immobile root primary Gravitor.
 static func make_root_gravitor(name_ : StringName, mu_ : float) -> Gravitor:
 	return Gravitor.new(name_, DoubleVector3.ZERO(), DoubleVector3.ZERO(), mu_)

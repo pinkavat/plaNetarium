@@ -53,7 +53,8 @@ func set_at(index : int, value : Variant) -> bool:
 		return false
 	var set_index = (_head + index) % len(_backing)
 	_backing[(_head + index) % len(_backing)] = value
-	added_item.emit(set_index, value)
+	if(index > 0): # TODO? There's a graphical bug in the orbitline that this fixes.
+		added_item.emit(set_index, value)
 	return true
 
 

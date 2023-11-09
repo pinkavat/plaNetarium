@@ -3,6 +3,7 @@ extends Node3D
 # Test driver script
 
 var sponch : Gravitee
+var orbit_line : TouchableOrbitPolyline
 
 var sol : Gravitor
 var earth : Gravitor
@@ -41,6 +42,12 @@ func _process(delta):
 	var tick_start_time := Time.get_ticks_usec()
 	var current_tick_budget := tick_budget_usec
 	
+	# Reticle placement
+	var mouse_closest_index := orbit_line.get_closest_point_to_mouse()
+	var closest_state = sponch.long_cache._backing[mouse_closest_index]
+	$Reticle.global_position = (closest_state.get_pos().vec3()) * space_scale
+	
+	
 	# Time speed controls
 	if Input.is_action_just_pressed("ui_right"):
 		time_scale *= 2.0
@@ -70,6 +77,12 @@ func _process(delta):
 			# Move sponch
 			$TestTarget3.global_position = state[0].vec3() * space_scale
 			
+			# Possibly apply some thrust to sponch
+			if Input.is_action_pressed("ui_up"):
+				sponch.reset(state[0], state[1].add(DoubleVector3.from_vec3(state[1].vec3().normalized() * 10.0)), sim_time / sponch.time_quantum)
+			elif Input.is_action_pressed("ui_down"):
+				sponch.reset(state[0], state[1].add(DoubleVector3.from_vec3(state[1].vec3().normalized() * -10.0)), sim_time / sponch.time_quantum)
+			
 			# Advance sim time
 			sim_time += delta * time_scale
 			
@@ -77,26 +90,21 @@ func _process(delta):
 		$Label.text = $Label.text + "\ngravitor cache hit/miss rate: " + str(float(cache_hits)/float(cache_misses))
 		$Label.text = $Label.text + "\ncurrent primary: " + str(sponch.long_cache.get_at(0).primary.name)
 		
-		# WITH REMAINING TIME IN THE TICK, PROPAGATE SPONCH'S CACHE.
-		current_tick_budget -= Time.get_ticks_usec() - tick_start_time
-		var last_time = Time.get_ticks_usec()
+	# WITH REMAINING TIME IN THE TICK, PROPAGATE SPONCH'S CACHE.
+	current_tick_budget -= Time.get_ticks_usec() - tick_start_time
+	var last_time = Time.get_ticks_usec()
 		
-		# TODO gravitor sweepline algorithm
-		for i in 2048: # TODO fallback
-			sponch.advance_cache() # at least once
+	# TODO gravitor sweepline algorithm
+	for i in 2048: # TODO fallback
+		sponch.advance_cache() # at least once
 			
-			var cur_time = Time.get_ticks_usec()
+		var cur_time = Time.get_ticks_usec()
 			
-			current_tick_budget -= (cur_time - last_time)
-			if current_tick_budget <= 0:
-				break
+		current_tick_budget -= (cur_time - last_time)
+		if current_tick_budget <= 0:
+			break
 			
-			last_time = cur_time
-		
-		
-		
-		# Move the prediction position shower
-		$SponchPrediction.global_position = (sponch.long_cache.get_at(sponch.long_cache_tail).get_pos().vec3()) * space_scale
+		last_time = cur_time
 
 
 func temp_move_planets(time):
@@ -127,6 +135,7 @@ func _ready():
 	#sponch = Gravitee.new(earth.pos_0.add(DoubleVector3.new(6628000, 0, 0)), earth.vel_0.add(DoubleVector3.new(0, 7750, 0)), 0.0, sol.all_states_at_time)
 	#print(sol.all_states_at_time(0.0))
 	
-	var orbit_line = OrbitPolyline.new(sponch.long_cache.length(), space_scale)
+	orbit_line = TouchableOrbitPolyline.new(sponch.long_cache.length(), space_scale)
 	sponch.long_cache.added_item.connect(orbit_line.add_point)
+	sponch.long_cache.invalidate.connect(orbit_line.invalidate)
 	add_child(orbit_line)

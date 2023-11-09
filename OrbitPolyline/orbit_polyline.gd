@@ -89,3 +89,13 @@ func add_point(index : int, data):
 		_colours[backing_prior_index + i] = Color.AQUA if data.primary.name == &"earth" else Color.ORANGE
 	
 	_recommit_mesh()
+
+# TODO doc
+func invalidate(index : int):
+	
+	var backing_index := index * VERTICES_PER_POINT
+	
+	for i in VERTICES_PER_POINT:
+		_colours[backing_index + i].a = 0.0
+	
+	_recommit_mesh()

@@ -49,24 +49,25 @@ func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float,
 	
 	state_fetch = state_fetch_
 	
-	# Work out the initial time quantum
-	# Unlike previous prototypes, we don't propagate forward to establish exact
-	# state. Rather, we trust to the granularity of the system and simply pretend
-	# that the state is the same at the first time quantum.
-	var time_quant_0 = int(time_0 / time_quantum)
-	
 	# Set up the long cache
 	long_cache = RingBuffer.new(long_cache_size)
 	long_cache_tail = 0
 	
 	# Invoke the resetter to set initial state
-	reset(pos_0, vel_0, time_quant_0)
+	reset(pos_0, vel_0, time_0)
 
 
 ## Reset the Gravitee to a new initial Cartesian state and time. Essentially the
 ## same thing as making a new Gravitee, but doesn't add memory burdens and invalidate
 ## references.
-func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, qtime_0 : int):
+func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
+	
+	# Work out the initial time quantum
+	# Unlike previous prototypes, we don't propagate forward to establish exact
+	# state. Rather, we trust to the granularity of the system and simply pretend
+	# that the state is the same at the first time quantum.
+	var qtime_0 = int(time_0 / time_quantum)
+	
 	# Perform a check to get our primary gravitor
 	# TODO: this is duplicate code of the pass in PEFRL below!
 	# (with all caveats thereto appertaining)

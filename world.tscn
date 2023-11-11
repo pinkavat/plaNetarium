@@ -1,10 +1,9 @@
-[gd_scene load_steps=16 format=3 uid="uid://bc1oc5nnldhpf"]
+[gd_scene load_steps=15 format=3 uid="uid://bc1oc5nnldhpf"]
 
 [ext_resource type="Texture2D" uid="uid://dj3si6echdek3" path="res://Solarsystemscope_texture_8k_stars.jpg" id="1_bfi6i"]
 [ext_resource type="Script" path="res://test_driver.gd" id="1_rs74j"]
 [ext_resource type="Script" path="res://CameraGimbal.gd" id="2_qjnjl"]
-[ext_resource type="Script" path="res://3to2proj.gd" id="3_nkavd"]
-[ext_resource type="Texture2D" uid="uid://dfb7jyhuwycv5" path="res://icon.svg" id="4_awewq"]
+[ext_resource type="Script" path="res://click_target.gd" id="3_xoevo"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_tueks"]
 panorama = ExtResource("1_bfi6i")
@@ -68,6 +67,9 @@ surface_material_override/0 = SubResource("StandardMaterial3D_3yawp")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget2"]
 shape = SubResource("SphereShape3D_bk0pi")
 
+[node name="ClickTarget" type="Node2D" parent="TestTarget2"]
+script = ExtResource("3_xoevo")
+
 [node name="TestTarget3" type="Area3D" parent="." groups=["camera_targetable"]]
 metadata/_edit_group_ = true
 
@@ -78,12 +80,8 @@ surface_material_override/0 = SubResource("StandardMaterial3D_pmi4p")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget3"]
 shape = SubResource("SphereShape3D_bk0pi")
 
-[node name="3to2proj" type="Node2D" parent="TestTarget3"]
-script = ExtResource("3_nkavd")
-
-[node name="Sprite2D" type="Sprite2D" parent="TestTarget3/3to2proj"]
-visible = false
-texture = ExtResource("4_awewq")
+[node name="ClickTarget2" type="Node2D" parent="TestTarget3"]
+script = ExtResource("3_xoevo")
 
 [node name="CameraGimbal" type="Node3D" parent="."]
 script = ExtResource("2_qjnjl")
@@ -99,7 +97,7 @@ offset_right = 40.0
 offset_bottom = 23.0
 
 [node name="Reticle" type="MeshInstance3D" parent="."]
-transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
+transform = Transform3D(0.001, 0, 0, 0, 0.001, 0, 0, 0, 0.001, 0, 0, 0)
 visible = false
 mesh = SubResource("SphereMesh_g50c7")
 surface_material_override/0 = SubResource("StandardMaterial3D_wvxy7")

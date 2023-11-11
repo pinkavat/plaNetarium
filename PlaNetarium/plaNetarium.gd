@@ -15,7 +15,8 @@ class_name PlaNetarium
 
 ## In order to keep the caches patent, simulation is discrete. 
 ## TODO: setting etc.
-var time_quantum := 1.0e-2
+## TODO: remove? leave to the gravitees alone?
+# var time_quantum := 1.0e-2
 
 
 # ========== READING FROM THE SIMULATION ==========
@@ -27,9 +28,6 @@ class State extends RefCounted:
 	
 	## Simulation time of the state, in seconds. 
 	var time : float
-	
-	## Simulation time of the state, in time quanta (see above).
-	var qtime : int
 	
 	
 	## Returns the position Vector3 of the named body. Will return the fallback
@@ -59,7 +57,7 @@ class State extends RefCounted:
 	
 	# Internal stuff; don't touch from without.
 	var _large_states : Dictionary # name -> Gravitor.GlobalState
-	var _small_states : Dictionary # name -> Gravitee.State (TODO temp)
+	var _small_states : Dictionary # name -> Gravitee.State
 
 
 
@@ -68,8 +66,11 @@ func peek_at_time(time : float) -> State:
 	var state = _new_state_with_large_bodies(time)
 	
 	# TODO TODO TODO small bodies
+	# TODO optionally peek down maneuvers...?
 	
 	return state
+
+# TODO: per-item peeking, right? Would be useful!
 
 
 ## Updating time-query function, used to advance the simulation. If any small body in the
@@ -84,9 +85,9 @@ func move_to_time(time : float) -> State:
 	# query for the same *time*. This shouldn't be a problem but might be!
 	# IN FACT: we could *FREEZE* the gravitees that are 'up to date', perhaps?
 	
-	# TODO temp, for bodies, not gravitees
-	for gravitee_name in _small_bodies:
-		var gravitee_state = _small_bodies[gravitee_name].state_at_time(time, true)
+	# Iterate over the small bodies' main courses
+	for small_name in _small_bodies:
+		var gravitee_state = _small_bodies[small_name].main_course.state_at_time(time, true)
 		if is_instance_of(gravitee_state, TYPE_INT):
 			if gravitee_state == 1:
 				# waits.
@@ -96,7 +97,7 @@ func move_to_time(time : float) -> State:
 				pass
 		else:
 			# valid; add to output
-			state._small_states[gravitee_name] = gravitee_state
+			state._small_states[small_name] = gravitee_state
 	
 	return state
 
@@ -106,9 +107,8 @@ func move_to_time(time : float) -> State:
 func _new_state_with_large_bodies(time : float) -> State:
 	# TODO QUANTIZE?
 	var state = State.new()
-	
+	state.time = time
 	state._large_states = cached_gravitor_query(time)
-	
 	return state
 
 
@@ -202,11 +202,68 @@ func temp_add_small_body(name : StringName, pos_0 : DoubleVector3, vel_0 : Doubl
 	assert(not name in _large_bodies, "Body names must be unique!")
 	assert(not name in _small_bodies, "Body names must be unique!")
 	
-	_small_bodies[name] = Gravitee.new(pos_0, vel_0, time_0, cached_gravitor_query)
-	return _small_bodies[name] # TODO only needful 'cause we haven't set up connectors yet for the orbitline
+	var temp_course = Gravitee.new(pos_0, vel_0, time_0, cached_gravitor_query)
+	var new_body = SmallBody.new()
+	new_body.main_course = temp_course
+	
+	_small_bodies[name] = new_body
+	return temp_course # TODO only needful 'cause we haven't set up connectors yet for the orbitline
 
 
 # TODO: small body force modification.
+
+
+# ========== MANEUVERING ==========
+# Some small bodies can generate chains of putative future courses. Managing these
+# is mostly up to the user, but automatic propagation/invalidation, etc. is our responsibility.
+
+## Adds an empty maneuver to the specified small body at the specified time. Maneuvers
+## are always added to the last maneuver, or the base course if no maneuvers exist.
+## Will return an opaque identifier for said maneuver (futureproofing).
+func add_maneuver_to(name : StringName, time : float):
+	var small_body : SmallBody = _small_bodies.get(name, null)
+	assert(small_body, "Can only add a maneuver to a small body!")
+	
+	var new_maneuver := Maneuver.new()
+	new_maneuver.start_time = time
+	new_maneuver.gravitee = Gravitee.new(DoubleVector3.ZERO(), DoubleVector3.ZERO(), time, cached_gravitor_query)
+	small_body.maneuvers.append(new_maneuver)
+
+
+## Updates the given maneuver. Provide a maneuver reference returned by add_maneuver_to above.
+func update_maneuver_of(name : StringName, maneuver : Variant): # TODO force rep.
+	var small_body : SmallBody = _small_bodies.get(name, null)
+	assert(small_body, "Can only change a maneuver of a small body!")
+	
+	# Find the maneuver in the maneuver list (simpler than linked-list, at minor cost)
+	var index = small_body.maneuvers.find(maneuver)
+	assert(index >= 0, "Couldn't find maneuver!")
+	
+	# Update the force data of the maneuver
+	# and possibly its start time too
+	# TODO
+	
+	# Invalidate the maneuver and all its successors
+	# TODO: emit maneuver-invalidation signal
+	for i in range(index, len(small_body.maneuvers)):
+		small_body.maneuvers[i].valid = false
+
+
+## Deletes the given maneuver. Provide a maneuver reference returned by add_maneuver_to above.
+func delete_maneuver_of(name : StringName, maneuver : Variant):
+	var small_body : SmallBody = _small_bodies.get(name, null)
+	assert(small_body, "Can only delete a maneuver from a small body!")
+	
+	# Find the maneuver in the maneuver list (simpler than linked-list, at minor cost)
+	var index = small_body.maneuvers.find(maneuver)
+	assert(index >= 0, "Couldn't find maneuver!")
+	
+	# Invalidate all successors
+	for i in range(index, len(small_body.maneuvers)):
+		small_body.maneuvers[i].valid = false
+	
+	# Delete self
+	small_body.maneuvers.remove_at(index)
 
 
 
@@ -220,16 +277,35 @@ func do_background_work(time_budget_usec : int) -> int:
 	# TODO gravitor sweepline algorithm
 	for i in 2048: # TODO fallback
 		
-		# TODO temp
-		for gravitee in _small_bodies.values():
-			gravitee.advance_cache() # at least once TODO: make it return false if no work and stop early!
+		for small_body in _small_bodies.values():
+			# Update the main course
+			small_body.main_course.advance_cache() # at least once TODO: make it return false if no work and stop early!
 			
+			# Update the maneuvers
+			for j in range(len(small_body.maneuvers)):
+				var maneuver : Maneuver = small_body.maneuvers[j]
+				if maneuver.valid:
+					# Valid maneuver; propagate its cache as normal.
+					maneuver.gravitee.advance_cache()
+				else:
+					# Invalid maneuver:
+					# Perform a state-at-time query on their parent (or the main course)
+					var parent_gravitee = small_body.main_course if j == 0 else small_body.maneuvers[j-1]
+					var parent_state = parent_gravitee.state_at_time(maneuver.start_time)
+					if is_instance_of(parent_state, Gravitee.State):
+						# Parent has successfully reached maneuver head; we can validate and
+						# begin computing the maneuver.
+						maneuver.valid = true
+						maneuver.gravitee.reset(parent_state.get_pos(), parent_state.get_vel(), maneuver.start_time)
+						pass # TODO force application
+					
+		
 		var cur_time = Time.get_ticks_usec()
-			
+		
 		time_budget_usec -= (cur_time - last_time)
 		if time_budget_usec <= 0:
 			break
-			
+		
 		last_time = cur_time
 	
 	return max(0, time_budget_usec)
@@ -245,8 +321,25 @@ var _large_bodies := {}
 # Name of the root large body.
 var _root_name : StringName
 
-# TODO: temp internals
+# The internal set of all small bodies managed by the simulation.
+# Name -> SmallBody (internal class below)
 var _small_bodies := {}
+
+# Internal data class for small bodies, which may possess multiple Gravitee maneuvers.
+class SmallBody extends RefCounted:
+	var main_course : Gravitee
+	var maneuvers := []
+
+# Internal data class for the Maneuver list attached to some SmallBodies.
+class Maneuver extends RefCounted:
+	var gravitee : Gravitee
+	var start_time : float
+	var valid : bool = false
+	# TODO: force representation
+
+
+
+
 
 
 # TODO Temporary caching scheme (copied from test code)

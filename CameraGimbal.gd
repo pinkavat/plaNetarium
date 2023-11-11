@@ -9,6 +9,7 @@ extends Node3D
 # can't detect direction.
 #
 # TODO zoom smoothing, dynamic zoom limits
+# If camera retargets, zoom limit should also adjust (so as not to stick camera into the sun, say)
 
 
 #var rotate_speed_gesture := 0.01 

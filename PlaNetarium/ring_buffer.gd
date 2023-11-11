@@ -19,6 +19,10 @@ signal invalidate(index)
 ## set there.
 signal added_item(index, item)
 
+# TODO: temp kludge to deal with zero-item setting visbug.
+# pending efficiency cleanup
+signal changed_item(index, item)
+
 
 # The actual underlying element array.
 var _backing
@@ -55,6 +59,8 @@ func set_at(index : int, value : Variant) -> bool:
 	_backing[(_head + index) % len(_backing)] = value
 	if(index > 0): # TODO? There's a graphical bug in the orbitline that this fixes.
 		added_item.emit(set_index, value)
+	else:
+		changed_item.emit(set_index, value)
 	return true
 
 

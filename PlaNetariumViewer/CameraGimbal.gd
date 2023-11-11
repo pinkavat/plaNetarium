@@ -40,6 +40,10 @@ func _process(_delta):
 	#global_position = global_position.lerp(target_pos, delta * move_lerp_factor)
 	global_position = target_pos + (move_orig_pos - target_pos) * move_amount
 	
+	# Assuming we precede things that rely on our projection in tree order
+	force_update_transform()
+	$Camera3D.force_update_transform()
+	
 
 
 func _start_move_towards(target):

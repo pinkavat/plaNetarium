@@ -1,9 +1,8 @@
-[gd_scene load_steps=15 format=3 uid="uid://bc1oc5nnldhpf"]
+[gd_scene load_steps=12 format=3 uid="uid://bc1oc5nnldhpf"]
 
 [ext_resource type="Texture2D" uid="uid://dj3si6echdek3" path="res://Solarsystemscope_texture_8k_stars.jpg" id="1_bfi6i"]
 [ext_resource type="Script" path="res://test_driver.gd" id="1_rs74j"]
 [ext_resource type="PackedScene" uid="uid://874fs66673ca" path="res://PlaNetariumViewer/planetarium_view.tscn" id="2_3n47u"]
-[ext_resource type="Script" path="res://PlaNetariumViewer/click_target.gd" id="4_0v24b"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_tueks"]
 panorama = ExtResource("1_bfi6i")
@@ -24,15 +23,6 @@ shading_mode = 0
 albedo_color = Color(0.819608, 0.615686, 0.0980392, 1)
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_bk0pi"]
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3yawp"]
-shading_mode = 0
-albedo_color = Color(0.203922, 0.615686, 0.537255, 1)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pmi4p"]
-transparency = 1
-shading_mode = 0
-albedo_color = Color(0.701961, 0.682353, 0.643137, 0.380392)
 
 [sub_resource type="SphereMesh" id="SphereMesh_g50c7"]
 
@@ -58,34 +48,6 @@ surface_material_override/0 = SubResource("StandardMaterial3D_ne3jq")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget"]
 shape = SubResource("SphereShape3D_bk0pi")
-
-[node name="TestTarget2" type="Area3D" parent="."]
-visible = false
-metadata/_edit_group_ = true
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget2"]
-mesh = SubResource("SphereMesh_mcfs0")
-surface_material_override/0 = SubResource("StandardMaterial3D_3yawp")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget2"]
-shape = SubResource("SphereShape3D_bk0pi")
-
-[node name="ClickTarget" type="Node2D" parent="TestTarget2"]
-script = ExtResource("4_0v24b")
-
-[node name="TestTarget3" type="Area3D" parent="."]
-visible = false
-metadata/_edit_group_ = true
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget3"]
-mesh = SubResource("SphereMesh_mcfs0")
-surface_material_override/0 = SubResource("StandardMaterial3D_pmi4p")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget3"]
-shape = SubResource("SphereShape3D_bk0pi")
-
-[node name="ClickTarget2" type="Node2D" parent="TestTarget3"]
-script = ExtResource("4_0v24b")
 
 [node name="Label" type="Label" parent="."]
 offset_right = 40.0

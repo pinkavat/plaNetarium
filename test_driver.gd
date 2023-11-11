@@ -7,6 +7,7 @@ var sponch
 var planetarium : PlaNetarium
 var view : PlaNetariumView
 
+
 func _ready():
 	
 	# TODO stringname-name testing

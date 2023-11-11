@@ -39,7 +39,9 @@ var sim_time := 0.0
 var _views := {}
 
 
-## Camera Gimbal: owns the camera, fields camera controls, and handles camera moves.
+# Camera Gimbal: owns the camera, fields camera controls, and handles camera moves.
+# NOTE: to ensure proper projection (2D overlays like orbits and clicktargets)
+# camera must precede all these in tree order (i.e. its process call runs first).
 @onready var _camera_gimbal := get_node("CameraGimbal")
 
 

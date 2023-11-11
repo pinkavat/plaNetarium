@@ -17,9 +17,8 @@ var color : Color = Color.AQUA
 ## Emitted on click
 signal clicked
 
-
-# Physics process -- gets jittery otherwise (?)
-func _physics_process(_delta):
+# Must follow camera gimbal in tree order!
+func _process(_delta):
 	
 	# Get camera
 	var camera = get_viewport().get_camera_3d()

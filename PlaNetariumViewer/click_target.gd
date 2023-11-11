@@ -12,7 +12,7 @@ var parent_apparent_min_rad = 0.00127 # TODO
 var radius : float = 20.0
 
 ## Displayed circle colour
-var colour : Color = Color.AQUA
+var color : Color = Color.AQUA
 
 ## Emitted on click
 signal clicked
@@ -32,8 +32,8 @@ func _physics_process(_delta):
 	# Check to see if the object we're representing is larger on screen than we are
 	var test_pos = to_local(camera.unproject_position(parent_pos + Vector3(0, parent_apparent_min_rad, 0)))
 	
-	# Local-hide if behind camera (ancestors can hide, too, to disable clicks)
-	if camera.is_position_behind(parent_pos) or test_pos.length_squared() > (radius * radius):
+	# Hide and disable clicks if behind camera, target sphere is large enough, or parent is hidden
+	if camera.is_position_behind(parent_pos) or test_pos.length_squared() > (radius * radius) or not get_parent().is_visible_in_tree():
 		hide()
 	else:
 		show()
@@ -42,13 +42,13 @@ func _physics_process(_delta):
 
 # Draw an empty circle around the target point
 func _draw():
-	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 32, colour, 4.0)
+	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 32, color, 4.0)
 
 
 # Field mouse clicks
 func _input(event):
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if is_visible_in_tree() and to_local(event.position).length_squared() < (radius * radius):
+		if visible and to_local(event.position).length_squared() < (radius * radius):
 			get_viewport().set_input_as_handled()
 			
 			clicked.emit()

@@ -2,8 +2,8 @@
 
 [ext_resource type="Texture2D" uid="uid://dj3si6echdek3" path="res://Solarsystemscope_texture_8k_stars.jpg" id="1_bfi6i"]
 [ext_resource type="Script" path="res://test_driver.gd" id="1_rs74j"]
-[ext_resource type="Script" path="res://CameraGimbal.gd" id="2_qjnjl"]
-[ext_resource type="Script" path="res://click_target.gd" id="3_xoevo"]
+[ext_resource type="PackedScene" uid="uid://874fs66673ca" path="res://PlaNetariumViewer/planetarium_view.tscn" id="2_3n47u"]
+[ext_resource type="Script" path="res://PlaNetariumViewer/click_target.gd" id="4_0v24b"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_tueks"]
 panorama = ExtResource("1_bfi6i")
@@ -44,10 +44,12 @@ albedo_color = Color(1, 1, 1, 0.262745)
 [node name="World" type="Node3D"]
 script = ExtResource("1_rs74j")
 
+[node name="PlaNetariumView" parent="." instance=ExtResource("2_3n47u")]
+
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_axqk5")
 
-[node name="TestTarget" type="Area3D" parent="." groups=["camera_targetable"]]
+[node name="TestTarget" type="Area3D" parent="."]
 metadata/_edit_group_ = true
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget"]
@@ -57,7 +59,8 @@ surface_material_override/0 = SubResource("StandardMaterial3D_ne3jq")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestTarget"]
 shape = SubResource("SphereShape3D_bk0pi")
 
-[node name="TestTarget2" type="Area3D" parent="." groups=["camera_targetable"]]
+[node name="TestTarget2" type="Area3D" parent="."]
+visible = false
 metadata/_edit_group_ = true
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget2"]
@@ -68,9 +71,10 @@ surface_material_override/0 = SubResource("StandardMaterial3D_3yawp")
 shape = SubResource("SphereShape3D_bk0pi")
 
 [node name="ClickTarget" type="Node2D" parent="TestTarget2"]
-script = ExtResource("3_xoevo")
+script = ExtResource("4_0v24b")
 
-[node name="TestTarget3" type="Area3D" parent="." groups=["camera_targetable"]]
+[node name="TestTarget3" type="Area3D" parent="."]
+visible = false
 metadata/_edit_group_ = true
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="TestTarget3"]
@@ -81,16 +85,7 @@ surface_material_override/0 = SubResource("StandardMaterial3D_pmi4p")
 shape = SubResource("SphereShape3D_bk0pi")
 
 [node name="ClickTarget2" type="Node2D" parent="TestTarget3"]
-script = ExtResource("3_xoevo")
-
-[node name="CameraGimbal" type="Node3D" parent="."]
-script = ExtResource("2_qjnjl")
-
-[node name="Camera3D" type="Camera3D" parent="CameraGimbal"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 23.3421)
-current = true
-fov = 50.0
-near = 0.001
+script = ExtResource("4_0v24b")
 
 [node name="Label" type="Label" parent="."]
 offset_right = 40.0

@@ -40,18 +40,32 @@ class State extends RefCounted:
 			return large_body.get_pos().vec3() # Gravitor.GlobalState
 		var small_body = _small_states.get(name, null)
 		if small_body:
-			return small_body.get_pos().vec3() # Gravitee.State (TODO)
+			return small_body.get_pos().vec3() # Gravitee.State
 		return fallback
 	
 	
 	## Returns the velocity Vector3 of the named body, or null, as in get_pos_of.
 	func get_vel_of(name : StringName, fallback = null):
-		return fallback # TODO
+		# Check large bodies
+		var large_body = _large_states.get(name, null)
+		if large_body:
+			return large_body.get_vel().vec3() # Gravitor.GlobalState
+		var small_body = _small_states.get(name, null)
+		if small_body:
+			return small_body.get_vel().vec3() # Gravitee.State
+		return fallback
 	
 	
-	## Returns the orbital parent of a large body, or the primary attractor
-	## of a small body. Ditto fallback.
+	## Returns the name of the orbital parent of a large body, or the primary attractor
+	## of a small body. Ditto fallback; will return null on the root attractor.
 	func get_primary_of(name : StringName, fallback = null):
+		# Check large bodies
+		var large_body = _large_states.get(name, null)
+		if large_body:
+			return large_body.gravitor.parent.name
+		var small_body = _small_states.get(name, null)
+		if small_body:
+			return small_body.primary.name
 		return fallback
 	
 	
@@ -119,7 +133,7 @@ func _new_state_with_large_bodies(time : float) -> State:
 ## root attractor of the system (as it's a fallback for various things)
 func _init(root_name : StringName, root_mu : float):
 	_root_name = root_name
-	_large_bodies[_root_name] = Gravitor.new(root_name, DoubleVector3.ZERO(), DoubleVector3.ZERO(), root_mu)
+	_large_bodies[_root_name] = Gravitor.new(root_name, DoubleVector3.ZERO(), DoubleVector3.ZERO(), root_mu, null)
 
 
 ## Add a large body (emits gravity, moves in Keplerian orbit).
@@ -182,7 +196,7 @@ func add_large_body(name : StringName, parent_name : StringName, parameters : Di
 	else:
 		assert(false, "Must specify either apo/periapsidal pair or axis/eccentricity pair!")
 	
-	var new_child := Gravitor.new(name, initial_state[0], initial_state[1], child_mu)
+	var new_child := Gravitor.new(name, initial_state[0], initial_state[1], child_mu, parent)
 	# Set the new gravitor's auxiliaries (TODO: in init above...?)
 	new_child.period = TAU * sqrt((semimajor_axis * semimajor_axis * semimajor_axis) / (parent.mu + child_mu))
 	new_child.soi_radius = 0.9431 * semimajor_axis * pow(child_mu / parent.mu, 2.0/5.0)

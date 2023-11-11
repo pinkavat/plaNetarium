@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3 uid="uid://874fs66673ca"]
+
+[ext_resource type="Script" path="res://PlaNetariumViewer/plaNetarium_view.gd" id="1_05np0"]
+[ext_resource type="Script" path="res://PlaNetariumViewer/CameraGimbal.gd" id="2_ifgoe"]
+
+[node name="PlaNetariumView" type="Node3D"]
+script = ExtResource("1_05np0")
+
+[node name="CameraGimbal" type="Node3D" parent="."]
+script = ExtResource("2_ifgoe")
+
+[node name="Camera3D" type="Camera3D" parent="CameraGimbal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 23.3421)
+current = true
+fov = 50.0
+near = 0.001

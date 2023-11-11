@@ -111,18 +111,18 @@ func _unhandled_input(event):
 				
 				# Fire a ray to see if camera is to move
 				
-				var params := PhysicsRayQueryParameters3D.new()
-				params.from = camera.project_ray_origin(event.position)
-				params.to = params.from + camera.project_ray_normal(event.position) * camera.far
-				params.collide_with_bodies = false
-				params.collide_with_areas = true
-				params.collision_mask = 0x1
-				var ray_result = get_world_3d().direct_space_state.intersect_ray(params)
-				
-				if ray_result and ray_result["collider"].is_in_group("camera_targetable"):
-					# We hit a targetable node; retarget the camera
-					if not target_node == ray_result["collider"]:
-						_start_move_towards(ray_result["collider"])
-				else:
-					# Ray didn't hit anything, so it's a grab-to-move.
-					grabbed = true
+#				var params := PhysicsRayQueryParameters3D.new()
+#				params.from = camera.project_ray_origin(event.position)
+#				params.to = params.from + camera.project_ray_normal(event.position) * camera.far
+#				params.collide_with_bodies = false
+#				params.collide_with_areas = true
+#				params.collision_mask = 0x1
+#				var ray_result = get_world_3d().direct_space_state.intersect_ray(params)
+#
+#				if ray_result and ray_result["collider"].is_in_group("camera_targetable"):
+#					# We hit a targetable node; retarget the camera
+#					if not target_node == ray_result["collider"]:
+#						_start_move_towards(ray_result["collider"])
+#				else:
+#					# Ray didn't hit anything, so it's a grab-to-move.
+				grabbed = true

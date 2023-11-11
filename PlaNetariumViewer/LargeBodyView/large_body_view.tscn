@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3 uid="uid://8pabwxyl1mi1"]
+
+[ext_resource type="Script" path="res://PlaNetariumViewer/click_target.gd" id="1_tomcy"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_lloby"]
+
+[node name="LargeBodyView" type="Node3D"]
+metadata/_edit_group_ = true
+
+[node name="TempPlanetMesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_lloby")
+
+[node name="ClickTarget" type="Node2D" parent="."]
+script = ExtResource("1_tomcy")

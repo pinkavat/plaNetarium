@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3 uid="uid://dhln6sccc3xr"]
+
+[ext_resource type="Script" path="res://PlaNetariumViewer/click_target.gd" id="1_nbb6w"]
+
+[node name="UnpredictableSmallBodyView" type="Node3D"]
+metadata/_edit_group_ = true
+
+[node name="ClickTarget" type="Node2D" parent="."]
+script = ExtResource("1_nbb6w")

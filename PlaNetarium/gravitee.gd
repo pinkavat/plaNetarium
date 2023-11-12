@@ -4,11 +4,10 @@ class_name Gravitee
 ## Body subject to the influence of gravity sources (a satellite).
 ##
 ## TODO: document
-## TODO: gravitor query: time quant or time actual? If time quant, quantum should
-##       be for the PLANETARIUM ENTIRE, right? If so, initializaztion, reset, etc.
-##		 should all be in quantum terms. right now they're inconsistent.
 ## TODO: linking into plaNetarium: 'primary' is set by an SOI check, which doesn't
 ##		 fall back to the system root and SHOULD.
+## TODO: state-at-time query returns a '0' on invalid -- should it?
+## TODO: refactor primary SOI detect/force pass etc.
 
 
 
@@ -31,6 +30,26 @@ var long_cache_tail : int
 ## Callback that returns the name->[pos, vel, mu] dictionary from the Gravitors,
 ## given a time.
 var state_fetch : Callable
+
+
+# In order to simplify maneuvering (that is, projection of future state under
+# arbitrary velocity changes), gravitees can form a doubly-linked list.
+# If any gravitee in the list updates, its successors will become 'invalid'
+# and have to wait until a valid parent propagates information as far as their
+# start time.
+
+## (Maneuver feature) Whether or not this gravitee's state, which depends on
+## 'ancestor' gravitees' state, is up to date.
+var valid := true
+
+## (Maneuver feature) Weak reference to potential ancestor gravitee.
+var predecessor_ref : WeakRef = null
+
+## (Maneuver feature) Weak reference to potential descendent gravitee.
+var successor_ref : WeakRef = null
+
+# (Maneuver internal) We need to store start time to make this work.
+var _time_0 : float
 
 
 
@@ -84,14 +103,32 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 	long_cache.shift_left(long_cache_tail)
 	long_cache.set_at(0, State.new(qtime_0, pos_0, vel_0, primary))
 	long_cache_tail = 0
+	
+	
+	# === MANEUVER STUFF ===
+	
+	# Store the start time
+	_time_0 = time_0
+	
+	# Invalidate children, if we have any:
+	# TODO: stop if we encounter an already invalid child?
+	if(successor_ref):
+		var successor = successor_ref.get_ref()
+		while(successor):
+			successor.valid = false
+			if(successor.successor_ref):
+				successor = successor.successor_ref.get_ref()
+			else:
+				break
 
 
 ## Get the Cartesian state of this Gravitee at the given time (TODO quantum or no?)
 ## Will return the following:
-##	- if the requested time PRECEDES any cached time, returns integer 0
-##		("we don't know and can't ever")
+##	- if the requested time PRECEDES any cached time, or the gravitee
+##	  is marked INVALID, returns integer 0
+##		("unknown due to external circumstances; ignore me")
 ##	- if the requested time is BEYOND the last cached time, returns integer 1
-##		("we don't know, but might eventually")
+##		("unknown due to unpropagated cache; call advance_cache and ask again")
 ##	- if the requested time falls WITHIN the cache, returns a State object
 ##
 ## if update_cache is true, the cache head will move:
@@ -99,6 +136,11 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 ##	- if the request was beyond the cache, the head will move to the cache tail
 ## (that is, set it to true for simulation time-advance, and false for prediction)
 func state_at_time(time : float, update_cache : bool = false):
+	
+	# If the gravitee is marked invalid, return immediately
+	# ("we don't know and don't know if we will ever know; not our problem")
+	if not valid:
+		return 0
 	
 	# 1) Quantize requested time (TODO: whether we subpropagate is still an open question)
 	var qt := int(time / time_quantum)
@@ -114,12 +156,12 @@ func state_at_time(time : float, update_cache : bool = false):
 	
 	# 2b) Check if time is BEFORE the long cache
 	elif qt < long_cache.get_at(0).qtime:
-		# Precedes cache; "can't ever know"
+		# Precedes cache; "we can't ever know."
 		return 0
 	
 	# 2c) Check if time is AFTER the long cache
 	elif qt >= long_cache.get_at(long_cache_tail).qtime:
-		# Follows cache; "we may eventually know but don't yet"
+		# Follows cache; "we will eventually know but don't yet"
 		
 		if long_cache_tail == (long_cache.length() - 1) and update_cache:
 			# If it's an updating request and the cache is out of space, we have
@@ -161,34 +203,65 @@ func state_at_time(time : float, update_cache : bool = false):
 	return state
 
 
-# TODO doc
-# TODO: finalize/stabilize coarseness metric
-# TODO: don't forget gravitor sweepline idea (it'd be higher up)
-func advance_cache() -> void:
-	if long_cache_tail < (long_cache.length() - 1):
-		var tail_state = long_cache.get_at(long_cache_tail)
+## Attempt to advance the orbit cache, by propagating forward from the tail and
+## storing only those points that are sufficiently coarse (see below).
+## Will return true if the cache is full, false otherwise.
+func advance_cache() -> bool:
+	if valid:
+		# Gravitee is valid; propagate cache as normal.
 		
-		var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
+		if long_cache_tail < (long_cache.length() - 1):
+			var tail_state = long_cache.get_at(long_cache_tail)
+			
+			var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
+			
+			# TODO: finalize/stabilize coarseness metric
+			
+			# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
+			# TODO: so we approximate it, by guesstimating an 'average orbital period of a satellite'
+			# which is a fixed gravitor proprerty; if it works, set it in the gravitor initializer.
+			
+			var synth_semim = tail_state.primary.soi_radius / 2.0
+			var estim_period = TAU * sqrt((synth_semim * synth_semim * synth_semim) / tail_state.primary.mu)
+			
+			estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0)
+			
+			@warning_ignore("narrowing_conversion")
+			var admissible_jump =  (estim_period / 256.0) / (time_quantum) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
+			
+			
+			#if long_cache_tail <= 0 or (not tail_state.get_pos().equals_approx(long_cache.get_at(long_cache_tail - 1).get_pos(), 1_000_000_000.0)):
+			if long_cache_tail <= 0 or (abs(tail_state.qtime - long_cache.get_at(long_cache_tail - 1).qtime) > admissible_jump):
+				# Not enough items OR coarseness criterion satisfied: add the state to the cache.
+				long_cache_tail += 1
+			# Otherwise coarseness criterion failed, and no need to add: replace the tail.
+			long_cache.set_at(long_cache_tail, next_state)
+			
+			return false # More work to be done
+		else:
+			return true # No more work to be done
 		
-		# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
-		# TODO: so we approximate it, by guesstimating an 'average orbital period of a satellite'
-		# which is a fixed gravitor proprerty; if it works, set it in the gravitor initializer.
+	else:
+		# Gravitee is invalid; check to see if it can be validated.
 		
-		var synth_semim = tail_state.primary.soi_radius / 2.0
-		var estim_period = TAU * sqrt((synth_semim * synth_semim * synth_semim) / tail_state.primary.mu)
+		# Check the parent to see if it's advanced to our start time
+		assert(predecessor_ref, "Trying to advance an invalid Gravitee with no parent -- should not happen!")
+		var predecessor = predecessor_ref.get_ref() # Ref assumed valid
+		var predecessor_state = predecessor.state_at_time(_time_0)
 		
-		estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0)
+		# TODO: there's an edge case to consider. If the state-at-time
+		# query precedes the parent (say, for instance, if we boost past a maneuver
+		# node, then try dragging it around) the maneuver will never validate.
 		
-		@warning_ignore("narrowing_conversion")
-		var admissible_jump =  (estim_period / 256.0) / (time_quantum) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
-		
-		
-		#if long_cache_tail <= 0 or (not tail_state.get_pos().equals_approx(long_cache.get_at(long_cache_tail - 1).get_pos(), 1_000_000_000.0)):
-		if long_cache_tail <= 0 or (abs(tail_state.qtime - long_cache.get_at(long_cache_tail - 1).qtime) > admissible_jump):
-			# Not enough items OR coarseness criterion satisfied: add the state to the cache.
-			long_cache_tail += 1
-		# Otherwise coarseness criterion failed, and no need to add: replace the tail.
-		long_cache.set_at(long_cache_tail, next_state)
+		if is_instance_of(predecessor_state, Gravitee.State):
+			# Predecessor has reached us; we are now valid and can begin advancing.
+			valid = true
+			reset(predecessor_state.get_pos(), predecessor_state.get_vel(), _time_0)
+			pass # TODO force application
+			
+			return false # More work to be done
+		else:
+			return true # No more work to be done
 
 
 

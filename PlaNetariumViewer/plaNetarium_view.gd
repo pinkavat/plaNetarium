@@ -162,27 +162,3 @@ func _process(delta):
 	# With remaining time in tick, advance plaNetarium caches, etc.
 	current_tick_budget -= Time.get_ticks_usec() - tick_start_time
 	planetarium.do_background_work(current_tick_budget)
-
-
-
-
-
-
-# =============== TODO for conversion ==================
-
-
-#func _process(delta):
-
-#
-#	# Reticle placement
-#	#var mouse_closest_index := orbit_line.get_closest_point_to_mouse()
-#	#var closest_state = sponch.long_cache._backing[mouse_closest_index]
-#	#$Reticle.global_position = (closest_state.get_pos().vec3()) * space_scale
-
-
-#
-#	$CameraGimbal/Camera3D.position.z = $CameraGimbal.min_zoom * 10.0
-#	$CameraGimbal._start_move_towards($TestTarget2)
-#	$CameraGimbal.move_amount = 0.0
-#
-

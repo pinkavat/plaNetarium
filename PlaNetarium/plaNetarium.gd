@@ -159,7 +159,7 @@ func _init(root_name : StringName, root_mu : float):
 ##			ascending_long [float] : angle from reference direction to ascending node
 ##			time_since_peri [float]: time elapsed between body at periapsis and orbit's reference time zero
 ##		}
-func add_large_body(name : StringName, parent_name : StringName, parameters : Dictionary, orbit : Dictionary):
+func add_large_body(name : StringName, parent_name : StringName, parameters : Dictionary, orbit : Dictionary) -> void:
 	assert(not name in _large_bodies, "Body names must be unique!")
 	assert(not name in _small_bodies, "Body names must be unique!")
 	assert(parent_name in _large_bodies, "Parent not found!")
@@ -211,21 +211,19 @@ func add_large_body(name : StringName, parent_name : StringName, parameters : Di
 
 # TODO: small body creators, controllable vs uncontrollable (one 'tee or many)
 ## TODO: temporary small-body adder for maintain func test.
-## TODO note: time-ref concerns; Double-precision not to be exposed!
-func temp_add_small_body(name : StringName, pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
+## TODO note: time-ref concerns
+func temp_add_small_body(name : StringName, pos_0 : Vector3, vel_0 : Vector3, time_0 : float) -> void:
 	assert(not name in _large_bodies, "Body names must be unique!")
 	assert(not name in _small_bodies, "Body names must be unique!")
 	
-	var temp_course = Gravitee.new(pos_0, vel_0, time_0, cached_gravitor_query)
+	var temp_course = Gravitee.new(DoubleVector3.from_vec3(pos_0), DoubleVector3.from_vec3(vel_0), time_0, cached_gravitor_query)
 	var new_body = SmallBody.new()
 	new_body.main_course = temp_course
 	
 	_small_bodies[name] = new_body
-	return temp_course # TODO only needful 'cause we haven't set up connectors yet for the orbitline
 
 
 # TODO: small body force modification.
-
 
 # ========== MANEUVERING ==========
 # Some small bodies can generate chains of putative future courses. Managing these
@@ -289,7 +287,7 @@ func do_background_work(time_budget_usec : int) -> int:
 	var last_time = Time.get_ticks_usec()
 	
 	# TODO gravitor sweepline algorithm
-	for i in 2048: # TODO fallback
+	for i in 256: # TODO fallback
 		
 		for small_body in _small_bodies.values():
 			# Update the main course
@@ -323,6 +321,28 @@ func do_background_work(time_budget_usec : int) -> int:
 		last_time = cur_time
 	
 	return max(0, time_budget_usec)
+
+
+
+# ========== ORBIT DRAWING ==========
+# Orbit Drawing is one of those things we really don't have a solution for that's
+# both modular and efficient (yet). So we break our paradigm a bit, for now.
+# TODO TODO TODO TODO TODO: improve this!!!
+
+# TODO: imperfect solution; refactor or remove!
+func connect_orbit_line(name : StringName, line : OrbitPolyline) -> void:
+	var body = _small_bodies.get(name)
+	assert(body, "Cannot find body to connect to!")
+	
+	var gravitee = body.main_course
+	
+	line.setup(gravitee.long_cache.length())
+	gravitee.long_cache.added_item.connect(line.add_point)
+	gravitee.long_cache.changed_item.connect(line.change_point)
+	gravitee.long_cache.invalidate.connect(line.invalidate)
+
+# TODO: connecting MANEUVER LINES -- what diff proc...?
+
 
 
 
@@ -371,3 +391,6 @@ func cached_gravitor_query(time : float) -> Dictionary:
 	else:
 		_cache_hits += 1
 	return _cached_gravitors
+
+func get_cache_ratio():
+	return float(_cache_hits) / float(_cache_misses)

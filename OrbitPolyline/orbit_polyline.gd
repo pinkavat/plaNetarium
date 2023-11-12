@@ -33,10 +33,16 @@ const UV_LOOKUP = [Vector2(0, -1), Vector2(1,1), Vector2(0, 1), Vector2(0, -1), 
 const VERTICES_PER_POINT : int = len(UV_LOOKUP)
 
 
+# Colour of the line
+var color := Color.WHITE
+
 # TODO: linkage of cache size/cache resizing concerns.
-func _init(size_ : int, space_scale_ : float):
-	size = size_
+func _init(space_scale_ : float):
 	space_scale = space_scale_
+
+# TODO: separated init and setup due to dependency clashing in plaNetarium core
+func setup(size_ : int):
+	size = size_
 	
 	# Resize backing buffers
 	_positions.resize(size * VERTICES_PER_POINT)
@@ -98,7 +104,7 @@ func add_point(index : int, data):
 		_next_positions[backing_prior_in_next + bi + 2] = pos.z
 		bi += 3
 		
-		_colours[backing_prior_index + i] = Color.AQUA if data.primary.name == &"earth" else Color.ORANGE
+		_colours[backing_prior_index + i] = color
 	
 	_recommit_mesh()
 

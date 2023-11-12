@@ -24,7 +24,7 @@ var running := true
 
 
 ## How many microseconds each process call is allowed to use.
-var tick_budget_usec : int = 8000
+var tick_budget_usec : int = 16000 # 8000
 
 
 
@@ -103,6 +103,22 @@ func load_small_body(body_name : StringName, view_type: ViewType, properties : D
 		ViewType.UNPREDICTABLE:
 			# Setup for unpredictable view
 			new_view = preload("res://PlaNetariumViewer/SmallBodyView/unpredictable_small_body_view.tscn").instantiate()
+		
+		ViewType.PREDICTABLE:
+			# Setup for predictable view
+			
+			# TODO This is TERRIBLE!
+			new_view = preload("res://PlaNetariumViewer/SmallBodyView/unpredictable_small_body_view.tscn").instantiate()
+			var orbit_line = OrbitPolyline.new(space_scale)
+			orbit_line.color = properties.get('color', Color.MAGENTA)
+			planetarium.connect_orbit_line(body_name, orbit_line)
+			
+			# TODO hmmm. Transform concerns!
+			var temp_recenterer = Node.new()
+			temp_recenterer.add_child(orbit_line)
+			new_view.add_child(temp_recenterer)
+			
+
 	
 	# Setup shared by all views
 	var click_target = new_view.get_node("ClickTarget")
@@ -169,8 +185,4 @@ func _process(delta):
 #	$CameraGimbal._start_move_towards($TestTarget2)
 #	$CameraGimbal.move_amount = 0.0
 #
-#	orbit_line = TouchableOrbitPolyline.new(sponch.long_cache.length(), space_scale)
-#	sponch.long_cache.added_item.connect(orbit_line.add_point)
-#	sponch.long_cache.changed_item.connect(orbit_line.change_point)
-#	sponch.long_cache.invalidate.connect(orbit_line.invalidate)
-#	add_child(orbit_line)
+

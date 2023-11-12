@@ -37,7 +37,7 @@ var state_fetch : Callable
 ## TODO: experimental. Obtain the admissible error for a given primary.
 ## TODO should be a property of the gravitor, like the acceptable jump
 func admissible_error_of(primary : Gravitor) -> float:
-	return 1.0 # TODO
+	return 10.0 # TODO
 
 
 ## Initialize a new Gravitee, with an initial Cartesian state (position and velocity) at

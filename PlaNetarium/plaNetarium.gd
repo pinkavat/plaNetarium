@@ -15,13 +15,18 @@ class_name PlaNetarium
 
 # ========== READING FROM THE SIMULATION ==========
 
-## Emitted when an orbit cache updates one of its positions.
-# TODO signal orbit_cache_set_at(name, index, pos)
+## Access static properties of a body by name. Returns null if not found.
+func get_property_of(name : StringName, property : StringName):
+	var body = _gravitors.get(name)
+	if body:
+		return body.get(property)
+	body = _gravitees.get(name)
+	if body:
+		return body.get(property)
+	return null
 
-## Emitted when an orbit
-# TODO
 
-## Reading from the simulation is done by time-based query, which returns
+## Reading state from the simulation is done by time-based query, which returns
 ## the Cartesian state for all bodies in the system, as one
 ## of these.
 class State extends RefCounted:
@@ -129,7 +134,14 @@ func _new_state_with_gravitors(time : float) -> State:
 ## root attractor of the system (as it's a fallback for various things)
 func _init(root_name : StringName, root_mu : float):
 	_root_name = root_name
-	_gravitors[_root_name] = Gravitor.new(root_name, DoubleVector3.ZERO(), DoubleVector3.ZERO(), root_mu, null)
+	var new_root_gravitor = Gravitor.new()
+	new_root_gravitor.name = root_name
+	new_root_gravitor.pos_0 = DoubleVector3.ZERO()
+	new_root_gravitor.vel_0 = DoubleVector3.ZERO()
+	new_root_gravitor.mu = root_mu
+	new_root_gravitor.parent = null
+	# TODO set meaningful otherstate
+	_gravitors[_root_name] = new_root_gravitor
 
 
 ## Add a large body that emits gravity and moves in a Keplerian orbit.
@@ -165,38 +177,47 @@ func add_gravitor(name : StringName, parent_name : StringName, parameters : Dict
 	var parent : Gravitor = _gravitors.get(parent_name)
 	assert(parent, "Parent not found!")
 	
-	var arg_periapsis : float = orbit.get("arg_periapsis", 0.0)
-	var inclination : float = orbit.get("inclination", 0.0)
-	var ascending_long : float = orbit.get("ascending_long", 0.0)
-	var time_since_peri : float = orbit.get("time_since_peri", 0.0)
+	var new_child := Gravitor.new()
+	new_child.name = name
+	new_child.mu = child_mu
+	new_child.parent = parent
 	
-	var initial_state # TODO: we're going to obsolete the old Kepple someday!
-	var semimajor_axis
+	new_child.arg_periapsis = orbit.get("arg_periapsis", 0.0)
+	new_child.inclination = orbit.get("inclination", 0.0)
+	new_child.ascending_long = orbit.get("ascending_long", 0.0)
+	var time_since_peri = orbit.get("time_since_peri", 0.0)
+	
+	# Fetch essential orbit parametrization
 	if("periapsis" in orbit and "apoapsis" in orbit):
 		# From apsides
 		
-		semimajor_axis = (orbit["periapsis"] + orbit["apoapsis"]) / 2.0
-		initial_state = UniversalKepler.initial_conditions_from_apsides(
-			parent.mu, orbit["periapsis"], orbit["apoapsis"], arg_periapsis, 
-			inclination, ascending_long, time_since_peri
-		)
+		new_child.periapsis = orbit["periapsis"]
+		new_child.apoapsis = orbit["apoapsis"]
+		new_child.semimajor_axis = (new_child.periapsis + new_child.apoapsis) / 2.0
+		new_child.eccentricity = 1.0 - (new_child.periapsis / new_child.semimajor_axis)
 		
 	elif("semimajor_axis" in orbit and "eccentricity" in orbit):
 		# From axis/eccentricity
 		
-		semimajor_axis = orbit["semimajor_axis"]
-		initial_state = UniversalKepler.initial_conditions_from_kepler(
-			parent.mu, orbit["semimajor_axis"], orbit["eccentricity"], arg_periapsis, 
-			inclination, ascending_long, time_since_peri
-		)
+		new_child.semimajor_axis = orbit["semimajor_axis"]
+		new_child.eccentricity = orbit["eccentricity"]
+		new_child.periapsis = new_child.semimajor_axis / (1.0 - new_child.eccentricity)
+		new_child.apoapsis = new_child.semimajor_axis / (1.0 + new_child.eccentricity)
 		
 	else:
 		assert(false, "Must specify either apo/periapsidal pair or axis/eccentricity pair!")
 	
-	var new_child := Gravitor.new(name, initial_state[0], initial_state[1], child_mu, parent)
-	# Set the new gravitor's auxiliaries (TODO: in init above...?)
-	new_child.period = TAU * sqrt((semimajor_axis * semimajor_axis * semimajor_axis) / (parent.mu + child_mu))
-	new_child.soi_radius = 0.9431 * semimajor_axis * pow(child_mu / parent.mu, 2.0/5.0)
+	# Compute initial state from orbital parameters
+	var initial_state = UniversalKepler.initial_conditions_from_kepler(
+		parent.mu, new_child.semimajor_axis, new_child.eccentricity, new_child.arg_periapsis, 
+		new_child.inclination, new_child.ascending_long, time_since_peri
+	)
+	new_child.pos_0 = initial_state[0]
+	new_child.vel_0 = initial_state[1]
+	
+	# Set the new gravitor's remaining celestial properties
+	new_child.period = TAU * sqrt((new_child.semimajor_axis * new_child.semimajor_axis * new_child.semimajor_axis) / (parent.mu + child_mu))
+	new_child.soi_radius = 0.9431 * new_child.semimajor_axis * pow(child_mu / parent.mu, 2.0/5.0)
 	new_child.soi_radius_squared = new_child.soi_radius * new_child.soi_radius
 	
 	# Add the new gravitor to the gravitor tree
@@ -280,6 +301,10 @@ func connect_orbit_line(name : StringName, line : OrbitPolyline) -> void:
 	gravitee.long_cache.invalidate.connect(line.invalidate)
 
 # TODO: connecting MANEUVER LINES -- what diff proc...?
+func sneaky_stuff(name : StringName) -> Gravitee:
+	var gravitee = _gravitees.get(name)
+	assert(gravitee, "Cannot find body to connect to!")
+	return gravitee
 
 
 

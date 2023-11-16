@@ -19,30 +19,27 @@ func _ready():
 	
 	planetarium.add_gravitor(&"earth", &"sol", {"mu" : 3.986e14}, {"periapsis":147.1e9, "apoapsis":152.1e9})
 	view.load_large_body(&"earth", {"color" : Color.SKY_BLUE})
-	
+
 	planetarium.add_gravitor(&"venus", &"sol", {"mu" : 3.249e14}, {"periapsis":107.5e9, "apoapsis":108.9e9})
 	view.load_large_body(&"venus", {"color" : Color.LIME_GREEN})
-	
+
 	planetarium.add_gravitor(&"mars", &"sol", {"mu" : 4.283e13}, {"periapsis":206.7e9, "apoapsis":249.2e9})
 	view.load_large_body(&"mars", {"color" : Color.ORANGE_RED})
 	
-	#planetarium.add_gravitor(&"nibiru", &"sol", {"mu" : 1.0}, {"periapsis":110.5e9, "apoapsis":110.5e9, "inclination":PI/4.0})
-	#view.load_large_body(&"nibiru", {"color" : Color.GREEN_YELLOW})
+#	planetarium.add_gravitor(&"nibiru", &"sol", {"mu" : 1.0}, {"periapsis":110.5e9, "apoapsis":310.5e9,"arg_periapsis":PI/4.0 ,"inclination":PI/4.0, "ascending_long":PI/4.0})
+#	view.load_large_body(&"nibiru", {"color" : Color.GREEN_YELLOW})
 	
-	# Baroque way of adding a small body at a position!
-	# TODO: WHEN THESE GO, REMOVE THE ASSOCIATED CODE IN GRAVITOR!
-	var sol = Gravitor.make_root_gravitor("sol", 1.327e20)
-	var earth = sol.add_child_from_apsides("earth", 3.986e14, 147.1e9, 152.1e9)
+	var earth_orbit := UniversalKepler.initial_conditions_from_apsides(1.327e20, 147.1e9, 152.1e9)
 	var lunar_orbit := UniversalKepler.initial_conditions_from_apsides(3.986e14, 363e6, 405e6)
-	var lunar_global = [lunar_orbit[0].add(earth.pos_0), lunar_orbit[1].add(earth.vel_0)]
-	
+	var lunar_global = [lunar_orbit[0].add(earth_orbit[0]), lunar_orbit[1].add(earth_orbit[1])]
+
 	planetarium.add_gravitee(&"sponch", lunar_global[0].vec3(), lunar_global[1].vec3(), 0.0)
 	view.load_small_body(&"sponch", PlaNetariumView.ViewType.PREDICTABLE, {"color" : Color.GRAY})
-	
-	planetarium.add_gravitee(&"quell", lunar_orbit[0].mul(2.0).add(earth.pos_0).vec3(), lunar_global[1].vec3(), 0.0)
+
+	planetarium.add_gravitee(&"quell", lunar_orbit[0].mul(2.0).add(earth_orbit[0]).vec3(), lunar_global[1].vec3(), 0.0)
 	view.load_small_body(&"quell", PlaNetariumView.ViewType.PREDICTABLE, {"color" : Color.ORANGE})
-	
-	planetarium.add_gravitee(&"quert", lunar_orbit[0].mul(8.0).add(earth.pos_0).vec3(), lunar_global[1].vec3(), 0.0)
+
+	planetarium.add_gravitee(&"quert", lunar_orbit[0].mul(8.0).add(earth_orbit[0]).vec3(), lunar_global[1].vec3(), 0.0)
 	view.load_small_body(&"quert", PlaNetariumView.ViewType.PREDICTABLE, {"color" : Color.YELLOW})
 
 

@@ -74,7 +74,17 @@ func load_large_body(body_name : StringName, properties : Dictionary):
 	new_mat.albedo_color = properties.get('color', Color.MAGENTA)
 	large_body_view.get_node("TempPlanetMesh").set_surface_override_material(0, new_mat)
 	
-	# TODO: orbit
+	# TODO doublecheck: orbit set
+	var orbit_line = OrbitLineConstant.new(
+		space_scale, 
+		planetarium.get_property_of(body_name, &"semimajor_axis"),
+		planetarium.get_property_of(body_name, &"eccentricity"),
+		planetarium.get_property_of(body_name, &"arg_periapsis"),
+		planetarium.get_property_of(body_name, &"inclination"),
+		planetarium.get_property_of(body_name, &"ascending_long"),
+		properties.get('color', Color.MAGENTA))
+	large_body_view.get_node("TransformIsolator").add_child(orbit_line)
+	
 	
 	var click_target = large_body_view.get_node("ClickTarget")
 	click_target.color = properties.get('color', Color.MAGENTA)
@@ -89,6 +99,7 @@ enum ViewType {
 	PREDICTABLE,	## Orbit shown, but no maneuvers.
 	CONTROLLABLE,	## Orbit and maneuvers shown.
 	CONTROLLED,		## Orbit and maneuvers shown and editable; touching orbit will show lookahead.
+	EXPERIMENTAL ## TODO REMOVE
 }
 
 ## Instances and adds a subtree showing the indicated small body, if it exists;
@@ -117,7 +128,6 @@ func load_small_body(body_name : StringName, view_type: ViewType, properties : D
 			var temp_recenterer = Node.new()
 			temp_recenterer.add_child(orbit_line)
 			new_view.add_child(temp_recenterer)
-			
 
 	
 	# Setup shared by all views

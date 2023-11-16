@@ -5,18 +5,6 @@ class_name OrbitPolyline
 ##
 ## TODO doc
 
-# TODO: still got some bugs of line segments being 'left behind'.
-# We've found the source: cache item zero is moved to the sim time
-# on an updating step. However, due to how the ring buffer's 'add item'
-# signal is interpreted, any writes to cache zero are ignored, so as not to
-# produce lagging lines. Therefore we'd need a different 'change item'
-# call, perhaps; though this is getting too baroque, no?
-
-# TODO: still more bugs of line segments being 'left behind' -- if you boost the speed,
-# it starts trailing segments. Hmm. I wonder if that's a deeper bug in the cache?
-# (actually, it's possible that the two are related... the line doesn't clear on
-# cache advance, which tells us it's not an invalid position, right?)
-
 
 var size : int	# TODO
 var space_scale : float # TODO 

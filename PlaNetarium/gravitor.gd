@@ -9,7 +9,6 @@ extends RefCounted
 ## Unique name for this gravitor
 var name : StringName
 
-
 ## Standard Gravitational Parameter (G * M) of this body.
 var mu : float
 
@@ -25,99 +24,25 @@ var parent : Gravitor = null
 ## Array of Gravitor children of this body.
 var children = []
 
-
-# ========== USEFUL PROPERTIES ==========
-
-# The values are fallback safeties for the root primary.
-var soi_radius : float = 7.4e12 # TODO: unsafe. Used in 'approx satellite period calc'; for root, this should be fixed high value.
-var soi_radius_squared : float = INF # TODO ditto, though this is used only in primary membership calc.
-var period : float = 10.0
-
-
 # Previous universal anomaly; cached for increased speed
 var prev_psi := 0.0
 
-## TODO destroy!
-## Factory function: creates and adds a new Gravitor to the Gravitor tree from
-## the given orbital parameters. Returns the new child for reference.
-func add_child_from_elements(
-	name_ : StringName,				# Unique name for the Gravitor
-	mu_ : float,					# Gravitational Parameter of new child
 
-	semimajor_axis_ : float = 1.0,	# The 'fatter radius' of the ellipse
-	eccentricity_ : float = 0.0,	# 0 is circle, >1 is hyperbola
-	arg_periapsis_ : float = 0.0,	# the angle from the ascending node to the periapsis
+# ========== CELESTIAL PROPERTIES ==========
 
-	inclination_ : float = 0.0,		# angle from coplanarity to orbitee
-	ascending_long_ : float = 0.0,	# angle from reference direction to ascending node
+# The initial values are fallback safeties for the root primary (TODO resolve)
+var soi_radius : float = 7.4e12 # TODO: unsafe. Used in 'approx satellite period calc'; for root, this should be fixed high value.
+var soi_radius_squared : float = INF # TODO ditto, though this is used only in primary membership calc.
 
-	time_since_peri_ : float = 0.0,	# Can't be arsed to parametrize by an anomaly
-									# this is time elapsed between body at periapsis
-									# and orbit's reference time zero)
-) -> Gravitor:
+var periapsis : float = 0.0
+var apoapsis : float = 0.0
+var period : float = 1.0
+var semimajor_axis : float = 0.0
+var eccentricity : float = 0.0
+var arg_periapsis : float = 0.0
+var inclination : float = 0.0
+var ascending_long : float = 0.0
 
-	# Establish the Gravitor's Keplerian orbit, using our own mu
-	var initial_state := UniversalKepler.initial_conditions_from_kepler(
-				mu, semimajor_axis_, eccentricity_, arg_periapsis_, 
-				inclination_, ascending_long_, time_since_peri_
-			)
-
-	# Make child and add it to our children
-	var child := Gravitor.new(name_, initial_state[0], initial_state[1], mu_, self)
-	child.period = TAU * sqrt((semimajor_axis_ * semimajor_axis_ * semimajor_axis_) / (mu + mu_))
-	child.soi_radius = 0.9431 * semimajor_axis_ * pow(mu_ / mu, 2.0/5.0)
-	child.soi_radius_squared = child.soi_radius * child.soi_radius
-	children.append(child)
-
-	return child
-
-## TODO destroy!
-## Factory function: creates and adds a new Gravitor to the Gravitor tree from
-## the given apsides (a simplification of the above).
-func add_child_from_apsides(
-	name_ : StringName,					# Unique name for the Gravitor
-	mu_ : float,						# Gravitational Parameter of new child
-
-	periapsis_distance_ : float = 1.0,	# Distance to periapsis from orbitee
-	apoapsis_distance_: float = 2.0,	# Distance to apoapsis from orbitee
-	arg_periapsis_ : float = 0.0,		# the angle from the ascending node to the periapsis
-
-	inclination_ : float = 0.0,			# angle from coplanarity to orbitee
-	ascending_long_ : float = 0.0,		# angle from reference direction to ascending node
-	time_since_peri_ : float = 0.0,		# See above
-) -> Gravitor:
-
-	# Establish the Gravitor's Keplerian orbit, using our own mu
-	var initial_state := UniversalKepler.initial_conditions_from_apsides(
-				mu, periapsis_distance_, apoapsis_distance_, arg_periapsis_, 
-				inclination_, ascending_long_, time_since_peri_
-			)
-
-	# Make child and add it to our children
-	var child := Gravitor.new(name_, initial_state[0], initial_state[1], mu_, self)
-	var semimajor_axis_ = (periapsis_distance_ + apoapsis_distance_) / 2.0
-	child.period = TAU * sqrt((semimajor_axis_ * semimajor_axis_ * semimajor_axis_) / (mu + mu_))
-	child.soi_radius = 0.9431 * semimajor_axis_ * pow(mu_ / mu, 2.0/5.0)
-	child.soi_radius_squared = child.soi_radius * child.soi_radius
-	children.append(child)
-
-	return child
-
-## TODO destroy!
-## Static factory function: creates an immobile root primary Gravitor.
-static func make_root_gravitor(name_ : StringName, mu_ : float) -> Gravitor:
-	return Gravitor.new(name_, DoubleVector3.ZERO(), DoubleVector3.ZERO(), mu_, null)
-
-
-## Initialize a Gravitor with the given initial state (Cart2Cart, TODO improve).
-## Not really meaningfully useable outside of invocation from the static factories above.
-## TODO: in fact don't use it at all, since it doesn't set some of the 'useful properties'!
-func _init(name_ : StringName, pos_0_ : DoubleVector3, vel_0_ : DoubleVector3, mu_ : float, parent_ : Gravitor) -> void:
-	name = name_
-	pos_0 = pos_0_
-	vel_0 = vel_0_
-	mu = mu_
-	parent = parent_
 
 
 ## Gravitor tree query: returns a Dictionary name->GlobalState (see below) for every

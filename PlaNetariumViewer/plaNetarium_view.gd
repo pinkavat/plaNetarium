@@ -74,23 +74,40 @@ func load_large_body(body_name : StringName, properties : Dictionary):
 	new_mat.albedo_color = properties.get('color', Color.MAGENTA)
 	large_body_view.get_node("TempPlanetMesh").set_surface_override_material(0, new_mat)
 	
-	# TODO doublecheck: orbit set
+	# Set up constant orbit line
+	var semimajor_axis = planetarium.get_property_of(body_name, &"semimajor_axis")
 	var orbit_line = OrbitLineConstant.new(
 		space_scale, 
-		planetarium.get_property_of(body_name, &"semimajor_axis"),
+		semimajor_axis,
 		planetarium.get_property_of(body_name, &"eccentricity"),
 		planetarium.get_property_of(body_name, &"arg_periapsis"),
 		planetarium.get_property_of(body_name, &"inclination"),
 		planetarium.get_property_of(body_name, &"ascending_long"),
 		properties.get('color', Color.MAGENTA))
-	large_body_view.get_node("TransformIsolator").add_child(orbit_line)
 	
+	# Add a screen-size detector to it, based on its semimajor axis length
+	# TODO DOESNT: WORK SEE CODE
+	var screen_size_detector = ScreenSizeDetector.new()
+	screen_size_detector.measuring_dist = semimajor_axis * space_scale
+	screen_size_detector.min_len = 10.0
+	screen_size_detector.max_len = 8000.0
+	screen_size_detector.entered_bounds.connect(orbit_line.show)
+	screen_size_detector.exited_bounds.connect(orbit_line.hide)
+	orbit_line.add_child(screen_size_detector)
 	
+	# Parent the orbitline to the parent gravitor, or the view if the parent is root.
+	var parent_view = _views.get(planetarium.get_property_of(body_name, &"parent_name"), self)
+	parent_view.add_child(orbit_line)
+	
+	# TODO: REPLACE CLICKTARGET'S RESPONSE TO SCREEN SIZE DETECTOR WITH SELF?
 	var click_target = large_body_view.get_node("ClickTarget")
 	click_target.color = properties.get('color', Color.MAGENTA)
 	click_target.clicked.connect(_camera_gimbal._start_move_towards.bind(large_body_view))
+	screen_size_detector.entered_bounds.connect(click_target.force_show)
+	screen_size_detector.exited_bounds.connect(click_target.force_hide)
 	
 	_views[body_name] = large_body_view
+	
 	add_child(large_body_view)
 
 
@@ -99,7 +116,6 @@ enum ViewType {
 	PREDICTABLE,	## Orbit shown, but no maneuvers.
 	CONTROLLABLE,	## Orbit and maneuvers shown.
 	CONTROLLED,		## Orbit and maneuvers shown and editable; touching orbit will show lookahead.
-	EXPERIMENTAL ## TODO REMOVE
 }
 
 ## Instances and adds a subtree showing the indicated small body, if it exists;
@@ -163,8 +179,8 @@ func _process(delta):
 				
 				# TODO
 				view.global_position = pos
-				#if view.has_method(""):
-				#	pass
+				#if view.has_method("set_pos"):
+				#	view.set_pos(pos)
 			
 			# Advance time.
 			sim_time += delta * time_scale

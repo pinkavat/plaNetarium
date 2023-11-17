@@ -17,6 +17,10 @@ var color : Color = Color.AQUA
 ## Emitted on click
 signal clicked
 
+# Visibility is controlled both by the self (rear projection, etc.) and by
+# external forces, so we have to keep track of the desired visibility.
+var imposed_visibility := true
+
 # Must follow camera gimbal in tree order!
 func _process(_delta):
 	
@@ -34,9 +38,19 @@ func _process(_delta):
 	# Hide and disable clicks if behind camera, target sphere is large enough, or parent is hidden
 	if camera.is_position_behind(parent_pos) or test_pos.length_squared() > (radius * radius) or not get_parent().is_visible_in_tree():
 		hide()
-	else:
+	elif imposed_visibility:
 		show()
+	else:
+		hide()
 
+
+## External showing call: overrides internal behaviour
+func force_show():
+	imposed_visibility = true
+
+## External hiding call: overrides internal behaviour
+func force_hide():
+	imposed_visibility = false
 
 
 # Draw an empty circle around the target point

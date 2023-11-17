@@ -26,6 +26,9 @@ func _ready():
 	planetarium.add_gravitor(&"mars", &"sol", {"mu" : 4.283e13}, {"periapsis":206.7e9, "apoapsis":249.2e9})
 	view.load_large_body(&"mars", {"color" : Color.ORANGE_RED})
 	
+	planetarium.add_gravitor(&"phobos", &"mars", {"mu" : 7.13e-3}, {"periapsis":9.234e6, "apoapsis":9.518e6})
+	view.load_large_body(&"phobos", {"color" : Color.DARK_RED})
+	
 #	planetarium.add_gravitor(&"nibiru", &"sol", {"mu" : 1.0}, {"periapsis":110.5e9, "apoapsis":310.5e9,"arg_periapsis":PI/4.0 ,"inclination":PI/4.0, "ascending_long":PI/4.0})
 #	view.load_large_body(&"nibiru", {"color" : Color.GREEN_YELLOW})
 	

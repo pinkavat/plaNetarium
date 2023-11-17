@@ -64,7 +64,7 @@ class State extends RefCounted:
 	func get_primary_of(name : StringName, fallback = null):
 		var gravitor_state = _gravitor_states.get(name, null)
 		if gravitor_state:
-			return gravitor_state.gravitor.parent.name
+			return gravitor_state.gravitor.parent_name
 		var gravitee_state = _gravitee_states.get(name, null)
 		if gravitee_state:
 			return gravitee_state.primary.name
@@ -139,7 +139,7 @@ func _init(root_name : StringName, root_mu : float):
 	new_root_gravitor.pos_0 = DoubleVector3.ZERO()
 	new_root_gravitor.vel_0 = DoubleVector3.ZERO()
 	new_root_gravitor.mu = root_mu
-	new_root_gravitor.parent = null
+	new_root_gravitor.parent_name = &""
 	# TODO set meaningful otherstate
 	_gravitors[_root_name] = new_root_gravitor
 
@@ -180,7 +180,7 @@ func add_gravitor(name : StringName, parent_name : StringName, parameters : Dict
 	var new_child := Gravitor.new()
 	new_child.name = name
 	new_child.mu = child_mu
-	new_child.parent = parent
+	new_child.parent_name = parent_name
 	
 	new_child.arg_periapsis = orbit.get("arg_periapsis", 0.0)
 	new_child.inclination = orbit.get("inclination", 0.0)
@@ -300,11 +300,6 @@ func connect_orbit_line(name : StringName, line : OrbitPolyline) -> void:
 	gravitee.long_cache.changed_item.connect(line.change_point)
 	gravitee.long_cache.invalidate.connect(line.invalidate)
 
-# TODO: connecting MANEUVER LINES -- what diff proc...?
-func sneaky_stuff(name : StringName) -> Gravitee:
-	var gravitee = _gravitees.get(name)
-	assert(gravitee, "Cannot find body to connect to!")
-	return gravitee
 
 
 

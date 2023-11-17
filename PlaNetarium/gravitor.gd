@@ -18,8 +18,8 @@ var pos_0 : DoubleVector3
 ## Local velocity of body at reference time.
 var vel_0 : DoubleVector3
 
-## Parent backreference, used only for 'get primary' query
-var parent : Gravitor = null
+## Parent name, used only for 'get primary' query
+var parent_name : StringName = &""
 
 ## Array of Gravitor children of this body.
 var children = []

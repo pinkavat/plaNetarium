@@ -12,5 +12,3 @@ mesh = SubResource("SphereMesh_lloby")
 
 [node name="ClickTarget" type="Node2D" parent="."]
 script = ExtResource("1_tomcy")
-
-[node name="TransformIsolator" type="Node" parent="."]

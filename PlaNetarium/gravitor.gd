@@ -18,14 +18,21 @@ var pos_0 : DoubleVector3
 ## Local velocity of body at reference time.
 var vel_0 : DoubleVector3
 
-## Parent name, used only for 'get primary' query
+## Parent gravitor, null for the root body.
+var parent : Gravitor
+
+## Parent name, used only for external property queries by the view.
 var parent_name : StringName = &""
 
 ## Array of Gravitor children of this body.
 var children = []
 
 # Previous universal anomaly; cached for increased speed
-var prev_psi := 0.0
+var _prev_psi := 0.0
+
+# Last queried global state cache (TODO sophisticated caching on PER GRAVITOR BASIS...?)
+var last_query_time : float = -INF
+var last_query_state : GlobalState
 
 
 # ========== CELESTIAL PROPERTIES ==========
@@ -45,40 +52,39 @@ var ascending_long : float = 0.0
 
 
 
-## Gravitor tree query: returns a Dictionary name->GlobalState (see below) for every
-## gravitor in the tree at the specified time. 
-## SHOULD ONLY BE INVOKED ON THE ROOT GRAVITOR.
-func all_states_at_time(time : float) -> Dictionary:
-	
-	var output := {}
-	_tree_state_query_kernel(time, output, DoubleVector3.ZERO(), DoubleVector3.ZERO())
-	
-	# Add ourself, the root:
-	output[name] = GlobalState.new(self, DoubleVector3.ZERO(), DoubleVector3.ZERO())
-	
-	return output
+## Get the global state of this gravitor at the given time.
+## TODO: interesting caching soln's here?
+func state_at_time(time : float) -> GlobalState:
+	if parent:
+		# Not the root
+		
+		if time == last_query_time:
+			# Cache hit
+			return last_query_state
+			
+		else:
+			# Cache miss
+			last_query_time = time
+			
+			# Get local state with a Kepler step
+			var local_state := UniversalKepler.query(pos_0, vel_0, 0.0, time, parent.mu, _prev_psi)
+			_prev_psi = local_state[2]
+			
+			# Get parent's global state recursively
+			var parent_state := parent.state_at_time(time)
+			
+			# Add to get our global state
+			last_query_state = GlobalState.new(
+				self, 
+				local_state[0].add(parent_state.get_pos()),
+				local_state[1].add(parent_state.get_vel())
+			)
+			
+			return last_query_state
+	else:
+		# Root Gravitor
+		return GlobalState.new(self, DoubleVector3.ZERO(), DoubleVector3.ZERO())
 
-
-# Recursive kernel for the above. Appends to given output array.
-func _tree_state_query_kernel(time : float, output : Dictionary, pos : DoubleVector3, vel : DoubleVector3) -> void:
-	
-	# For every child:
-	for child in children:
-		# Establish the child's local state, using the Kepler query on our own gravity param
-		var local_state := UniversalKepler.query(child.pos_0, child.vel_0, 0.0, time, mu, child.prev_psi)
-		child.prev_psi = local_state[2]
-		
-		var global_pos : DoubleVector3 = local_state[0].add(pos)
-		var global_vel : DoubleVector3 = local_state[1].add(vel)
-		
-		# Add this to the accumulated state to get the child's global state
-		var global_state := GlobalState.new(child, global_pos, global_vel)
-		
-		# Append the global state to the output
-		output[child.name] = global_state
-		
-		# Recurse
-		child._tree_state_query_kernel(time, output, global_pos, global_vel)
 
 
 # ========== STATE CLASS ==========
@@ -115,3 +121,43 @@ class GlobalState extends RefCounted:
 	## Velocity getter; Doubelvec is brand-new
 	func get_vel() -> DoubleVector3:
 		return DoubleVector3.new(_vel_x, _vel_y, _vel_z)
+
+
+
+# ========== LEGACY ROOT-TO-LEAF TRAVERSE ==========
+# TODO: remove
+
+## Gravitor tree query: returns a Dictionary name->GlobalState (see below) for every
+## gravitor in the tree at the specified time. 
+## SHOULD ONLY BE INVOKED ON THE ROOT GRAVITOR.
+#func all_states_at_time(time : float) -> Dictionary:
+#
+#	var output := {}
+#	_tree_state_query_kernel(time, output, DoubleVector3.ZERO(), DoubleVector3.ZERO())
+#
+#	# Add ourself, the root:
+#	output[name] = GlobalState.new(self, DoubleVector3.ZERO(), DoubleVector3.ZERO())
+#
+#	return output
+#
+#
+## Recursive kernel for the above. Appends to given output array.
+#func _tree_state_query_kernel(time : float, output : Dictionary, pos : DoubleVector3, vel : DoubleVector3) -> void:
+#
+#	# For every child:
+#	for child in children:
+#		# Establish the child's local state, using the Kepler query on our own gravity param
+#		var local_state := UniversalKepler.query(child.pos_0, child.vel_0, 0.0, time, mu, child._prev_psi)
+#		child._prev_psi = local_state[2]
+#
+#		var global_pos : DoubleVector3 = local_state[0].add(pos)
+#		var global_vel : DoubleVector3 = local_state[1].add(vel)
+#
+#		# Add this to the accumulated state to get the child's global state
+#		var global_state := GlobalState.new(child, global_pos, global_vel)
+#
+#		# Append the global state to the output
+#		output[child.name] = global_state
+#
+#		# Recurse
+#		child._tree_state_query_kernel(time, output, global_pos, global_vel)

@@ -87,13 +87,13 @@ func load_large_body(body_name : StringName, properties : Dictionary):
 	
 	# Add a screen-size detector to it, based on its semimajor axis length
 	# TODO DOESNT: WORK SEE CODE
-	var screen_size_detector = ScreenSizeDetector.new()
-	screen_size_detector.measuring_dist = semimajor_axis * space_scale
-	screen_size_detector.min_len = 10.0
-	screen_size_detector.max_len = 8000.0
-	screen_size_detector.entered_bounds.connect(orbit_line.show)
-	screen_size_detector.exited_bounds.connect(orbit_line.hide)
-	orbit_line.add_child(screen_size_detector)
+	#var screen_size_detector = ScreenSizeDetector.new()
+	#screen_size_detector.measuring_dist = semimajor_axis * space_scale
+	#screen_size_detector.min_len = 10.0
+	#screen_size_detector.max_len = 8000.0
+	#screen_size_detector.entered_bounds.connect(orbit_line.show)
+	#screen_size_detector.exited_bounds.connect(orbit_line.hide)
+	#orbit_line.add_child(screen_size_detector)
 	
 	# Parent the orbitline to the parent gravitor, or the view if the parent is root.
 	var parent_view = _views.get(planetarium.get_property_of(body_name, &"parent_name"), self)
@@ -103,8 +103,8 @@ func load_large_body(body_name : StringName, properties : Dictionary):
 	var click_target = large_body_view.get_node("ClickTarget")
 	click_target.color = properties.get('color', Color.MAGENTA)
 	click_target.clicked.connect(_camera_gimbal._start_move_towards.bind(large_body_view))
-	screen_size_detector.entered_bounds.connect(click_target.force_show)
-	screen_size_detector.exited_bounds.connect(click_target.force_hide)
+	#screen_size_detector.entered_bounds.connect(click_target.force_show)
+	#screen_size_detector.exited_bounds.connect(click_target.force_hide)
 	
 	_views[body_name] = large_body_view
 	

@@ -140,6 +140,7 @@ func _init(root_name : StringName, root_mu : float):
 	new_root_gravitor.vel_0 = DoubleVector3.ZERO()
 	new_root_gravitor.mu = root_mu
 	new_root_gravitor.parent_name = &""
+	new_root_gravitor.parent = null
 	# TODO set meaningful otherstate
 	_gravitors[_root_name] = new_root_gravitor
 
@@ -181,6 +182,7 @@ func add_gravitor(name : StringName, parent_name : StringName, parameters : Dict
 	new_child.name = name
 	new_child.mu = child_mu
 	new_child.parent_name = parent_name
+	new_child.parent = parent
 	
 	new_child.arg_periapsis = orbit.get("arg_periapsis", 0.0)
 	new_child.inclination = orbit.get("inclination", 0.0)
@@ -318,13 +320,7 @@ var _root_name : StringName
 var _gravitees := {}
 
 
-
-
-
-
-
-
-# TODO Temporary caching scheme (copied from test code)
+# TODO Temporary fullset caching scheme (copied from test code)
 var _last_queried_time := -1.0
 var _cached_gravitors : Dictionary
 var _cache_misses : int = 0
@@ -333,7 +329,14 @@ func cached_gravitor_query(time : float) -> Dictionary:
 	if not (time == _last_queried_time):
 		# Cache miss
 		_last_queried_time = time
-		_cached_gravitors = _gravitors[_root_name].all_states_at_time(time)
+		
+		#_cached_gravitors = _gravitors[_root_name].all_states_at_time(time)
+		
+		# TODO: gravitor local cache..? or is that just INTRAREQUEST...?
+		_cached_gravitors = {}
+		for gravitor in _gravitors.values():
+			_cached_gravitors[gravitor.name] = gravitor.state_at_time(time)
+		
 		_cache_misses += 1
 	else:
 		_cache_hits += 1

@@ -187,7 +187,7 @@ func add_gravitor(name : StringName, parent_name : StringName, parameters : Dict
 	new_child.arg_periapsis = orbit.get("arg_periapsis", 0.0)
 	new_child.inclination = orbit.get("inclination", 0.0)
 	new_child.ascending_long = orbit.get("ascending_long", 0.0)
-	var time_since_peri = orbit.get("time_since_peri", 0.0)
+	new_child.time_since_peri = orbit.get("time_since_peri", 0.0)
 	
 	# Fetch essential orbit parametrization
 	if("periapsis" in orbit and "apoapsis" in orbit):
@@ -212,7 +212,7 @@ func add_gravitor(name : StringName, parent_name : StringName, parameters : Dict
 	# Compute initial state from orbital parameters
 	var initial_state = UniversalKepler.initial_conditions_from_kepler(
 		parent.mu, new_child.semimajor_axis, new_child.eccentricity, new_child.arg_periapsis, 
-		new_child.inclination, new_child.ascending_long, time_since_peri
+		new_child.inclination, new_child.ascending_long, new_child.time_since_peri
 	)
 	new_child.pos_0 = initial_state[0]
 	new_child.vel_0 = initial_state[1]
@@ -292,7 +292,7 @@ func do_background_work(time_budget_usec : int) -> int:
 # both modular and efficient (yet). So we break our paradigm a bit, for now.
 # TODO TODO TODO TODO TODO: improve this!!!
 
-# TODO:  remove! set ups ignals above
+# TODO:  remove! set up signals above
 func connect_orbit_line(name : StringName, line : OrbitPolyline) -> void:
 	var gravitee = _gravitees.get(name)
 	assert(gravitee, "Cannot find body to connect to!")
@@ -320,27 +320,28 @@ var _root_name : StringName
 var _gravitees := {}
 
 
-# TODO Temporary fullset caching scheme (copied from test code)
-var _last_queried_time := -1.0
-var _cached_gravitors : Dictionary
+# TODO Temporary caching scheme (copied from test code)
 var _cache_misses : int = 0
 var _cache_hits : int = 0
+var _temp_cache := FIFOCache.new(30) # TODO automatic initial sizing
+
 func cached_gravitor_query(time : float) -> Dictionary:
-	if not (time == _last_queried_time):
-		# Cache miss
-		_last_queried_time = time
-		
-		#_cached_gravitors = _gravitors[_root_name].all_states_at_time(time)
-		
-		# TODO: gravitor local cache..? or is that just INTRAREQUEST...?
-		_cached_gravitors = {}
-		for gravitor in _gravitors.values():
-			_cached_gravitors[gravitor.name] = gravitor.state_at_time(time)
-		
-		_cache_misses += 1
-	else:
+	var cache_query = _temp_cache.find(time)
+	if cache_query:
+		# Cache hit
 		_cache_hits += 1
-	return _cached_gravitors
+	
+		return cache_query
+	else:
+		# Cache miss
+		_cache_misses += 1
+		
+		var _new_all_gravitors = {}
+		for gravitor in _gravitors.values():
+			_new_all_gravitors[gravitor.name] = gravitor.state_at_time(time)
+		
+		_temp_cache.add(time, _new_all_gravitors)
+		return _new_all_gravitors
 
 func get_cache_ratio():
 	return float(_cache_hits) / float(_cache_misses)

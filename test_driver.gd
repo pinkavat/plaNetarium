@@ -10,7 +10,7 @@ var view : PlaNetariumView
 
 func _ready():
 	
-	# TODO stringname-name testing
+	# TODO stringname-name testing.
 	
 	planetarium = PlaNetarium.new(&"sol", 1.327e20)
 	

@@ -49,6 +49,70 @@ var eccentricity : float = 0.0
 var arg_periapsis : float = 0.0
 var inclination : float = 0.0
 var ascending_long : float = 0.0
+var time_since_peri : float = 0.0
+
+
+
+
+## TODO: temporary scaffolding for simpler Kepler solver.
+## NOTE: THIS IS PREDICATED ON ELLIPSOID ORBITS ONLY. Safe assumption, really, but
+## MUST BE DOCUMENTED!!!!!!!!!!!!!!!!!!!!!!!!!!!
+## EXPERIMENTALLY WE HAVE A DISCREPANCY Vs. UNIVERSAL OF 3 KM or so Position. Hmmmmm.
+func _temp_kepple(time : float):
+	
+	# TODO: bowse out; all celestial vars go to initializer, which takes over
+	# universal keplers' initial-cond-from-time stuff:
+	var average_sweep_rate := TAU / period
+	
+	var mean_anomaly := average_sweep_rate * (time - time_since_peri)
+	
+	# TODO: cache initial eccentric anom. same way we cached psi
+	
+	# Bring on the Newton-Raphson hammer of successive approximation!
+	var eccentric_anomaly := PI if eccentricity >= 0.8 else mean_anomaly
+	while true: # TODO fallback; TODO count iterations needed; compare to Universal Kep.
+				# TODO Stackoverf. suggests fix a max at 5 or so...?
+		
+		var delta_eccentric :=   \
+			(eccentric_anomaly - eccentricity * sin(eccentric_anomaly) - mean_anomaly) /   \
+			(1.0 - eccentricity * cos(eccentric_anomaly))
+		
+		eccentric_anomaly -= delta_eccentric
+		
+		if is_equal_approx(delta_eccentric, 0.0): # TODO larger epsilon?
+			break
+	
+	# Bypass true anomaly entirely and go straight into orbit-plane 2D coordinates...
+	# Courtesy of https://space.stackexchange.com/questions/8911/determining-orbital-position-at-a-future-point-in-time
+	var p := semimajor_axis * (cos(eccentric_anomaly) - eccentricity)
+	var q := -semimajor_axis * sin(eccentric_anomaly) * sqrt(1.0 - eccentricity * eccentricity)
+	
+	# ...which we then rotate into 3D space, using the remaining Kepler elements:
+	var position = _temp_orbitplane_to_global(p, q)
+	
+	# Ditto velocity:
+	var p_v := -semimajor_axis * sin(eccentric_anomaly) * average_sweep_rate / (1 - eccentricity * cos(eccentric_anomaly))
+	var q_v := -semimajor_axis * cos(eccentric_anomaly) * sqrt(1 - eccentricity * eccentricity) * average_sweep_rate / (1 - eccentricity * cos(eccentric_anomaly))
+	
+	var velocity = _temp_orbitplane_to_global(p_v, q_v)
+	
+	return velocity
+	# TODO return
+	# TODO VELOCITY? See stackf. for sol'n, but may be overkill?
+
+# TODO doc
+func _temp_orbitplane_to_global(p : float, q : float) -> DoubleVector3:
+	# NOTE: this transformation differs from our notes -- y and z are flipped, and q is negated.
+	# Reason being the notes were from (I think) a LHS, and Godot is RHS.
+	var x := p * cos(arg_periapsis) - q * sin(arg_periapsis)
+	var z := p * sin(arg_periapsis) + q * cos(arg_periapsis)
+	var y := z * sin(inclination)
+	z *= cos(inclination)
+	var x_temp := x
+	x = x_temp * cos(ascending_long) - z * sin(ascending_long)
+	z = x_temp * sin(ascending_long) + z * cos(ascending_long)
+	return DoubleVector3.new(x, y, z)
+
 
 
 
@@ -69,6 +133,7 @@ func state_at_time(time : float) -> GlobalState:
 			# Get local state with a Kepler step
 			var local_state := UniversalKepler.query(pos_0, vel_0, 0.0, time, parent.mu, _prev_psi)
 			_prev_psi = local_state[2]
+			
 			
 			# Get parent's global state recursively
 			var parent_state := parent.state_at_time(time)

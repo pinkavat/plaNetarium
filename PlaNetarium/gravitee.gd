@@ -31,6 +31,10 @@ var long_cache_tail : int
 ## given a time.
 var state_fetch : Callable
 
+## TODO EXPERIMENTAL: name of the Gravitor relative to whose frame of reference
+## relative position is computed. Must be a valid key to a return from state_fetch.
+var reference_gravitor_name : StringName
+
 
 # In order to simplify maneuvering (that is, projection of future state under
 # arbitrary velocity changes), gravitees can form a doubly-linked list.
@@ -63,10 +67,11 @@ func admissible_error_of(primary : Gravitor) -> float:
 ## the given time. Provide the callable that furnishes the gravitor state array.
 ## Optionally specify the initial long cache size (positive integer).
 func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float, 
-	state_fetch_ : Callable, long_cache_size : int = 256
+	state_fetch_ : Callable, reference_gravitor_name_ : StringName, long_cache_size : int = 256
 	) -> void:
 	
 	state_fetch = state_fetch_
+	reference_gravitor_name = reference_gravitor_name_
 	
 	# Set up the long cache
 	long_cache = RingBuffer.new(long_cache_size)
@@ -92,7 +97,8 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 	# (with all caveats thereto appertaining)
 	var primary : Gravitor = null
 	var min_rel := INF
-	for gravitor_state in state_fetch.call(float(qtime_0) * time_quantum).values():
+	var initial_gravitor_state = state_fetch.call(float(qtime_0) * time_quantum)
+	for gravitor_state in initial_gravitor_state.values():
 		var rel_pos : DoubleVector3 = gravitor_state.get_pos().sub(pos_0)
 		var rel_pos_dot := rel_pos.dot(rel_pos)
 		if rel_pos_dot < gravitor_state.gravitor.soi_radius_squared and rel_pos_dot < min_rel:
@@ -101,7 +107,7 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 	
 	# Reset the long cache
 	long_cache.shift_left(long_cache_tail)
-	long_cache.set_at(0, State.new(qtime_0, pos_0, vel_0, primary))
+	long_cache.set_at(0, State.new(qtime_0, pos_0, vel_0, primary, pos_0.sub(initial_gravitor_state[reference_gravitor_name].get_pos())))
 	long_cache_tail = 0
 	
 	
@@ -120,6 +126,12 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 				successor = successor.successor_ref.get_ref()
 			else:
 				break
+
+
+## TODO EXPERIMENTAL DOC
+func change_reference_gravitor(new_gravitor_name : StringName):
+	reference_gravitor_name = new_gravitor_name
+	# TODO: Regenerate cache relative positions.
 
 
 ## Get the Cartesian state of this Gravitee at the given time (TODO quantum or no?)
@@ -377,7 +389,7 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	vel = vel.add(acc.mul(dt * (0.5 - lambda)))
 	pos = pos.add(vel.mul(dt * xi))
 	
-	return State.new(state.qtime + qdt, pos, vel, primary)
+	return State.new(state.qtime + qdt, pos, vel, primary, pos.sub(gravitors[reference_gravitor_name].get_pos()))
 
 
 
@@ -404,7 +416,7 @@ class State extends RefCounted:
 	var _vel_z : float
 	
 	## Don't set state members. If we need to change them, just make a new state:
-	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3, primary_ : Gravitor):
+	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3, primary_ : Gravitor, rel_pos_ : DoubleVector3):
 		qtime = qtime_
 		primary = primary_
 		_pos_x = pos_.x
@@ -413,6 +425,9 @@ class State extends RefCounted:
 		_vel_x = vel_.x
 		_vel_y = vel_.y
 		_vel_z = vel_.z
+		_rel_pos_x = rel_pos_.x
+		_rel_pos_y = rel_pos_.y
+		_rel_pos_z = rel_pos_.z
 	
 	## Position getter; Doublevec is brand-new
 	func get_pos() -> DoubleVector3:
@@ -421,3 +436,12 @@ class State extends RefCounted:
 	## Velocity getter; Doubelvec is brand-new
 	func get_vel() -> DoubleVector3:
 		return DoubleVector3.new(_vel_x, _vel_y, _vel_z)
+	
+	
+	# TODO EXPERIMENTAL: RELATIVE POSITION
+	var _rel_pos_x : float
+	var _rel_pos_y : float
+	var _rel_pos_z : float
+	
+	func get_rel_pos() -> DoubleVector3:
+		return DoubleVector3.new(_rel_pos_x, _rel_pos_y, _rel_pos_z)

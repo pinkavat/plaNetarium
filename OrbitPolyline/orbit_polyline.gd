@@ -71,7 +71,7 @@ func _recommit_mesh():
 func add_point(index : int, data):
 	
 	#var time = data[0] # TODO this is TIME QUANTUM of the gravitee
-	var pos : Vector3 = data.get_pos().vec3() * space_scale
+	var pos : Vector3 = data.get_rel_pos().vec3() * space_scale
 	
 	var prior_index := (index + (size - 1)) % size
 	
@@ -100,7 +100,7 @@ func add_point(index : int, data):
 func change_point(index : int, data):
 	
 	#var time = data[0] # TODO this is TIME QUANTUM of the gravitee
-	var pos : Vector3 = data.get_pos().vec3() * space_scale
+	var pos : Vector3 = data.get_rel_pos().vec3() * space_scale
 	
 	var backing_index := index * VERTICES_PER_POINT
 	

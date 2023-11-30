@@ -55,5 +55,4 @@ func _process(_delta):
 	if Input.is_action_just_pressed("ui_accept"):
 		view.running = not view.running
 	
-	
 	$Label.text = "cache hit/miss ratio: " + str(planetarium.get_cache_ratio())

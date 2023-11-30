@@ -48,7 +48,7 @@ class State extends RefCounted:
 		return fallback
 	
 	
-	## Returns the velocity Vector3 of the named body, or null, as in get_pos_of.
+	## Returns the velocity Vector3 of the named body, or fallback, as in get_pos_of.
 	func get_vel_of(name : StringName, fallback = null):
 		var gravitor_state = _gravitor_states.get(name, null)
 		if gravitor_state:
@@ -60,7 +60,7 @@ class State extends RefCounted:
 	
 	
 	## Returns the name of the orbital parent of a large body, or the primary attractor
-	## of a small body. Ditto fallback; will return null on the root attractor.
+	## of a small body. Ditto fallback; will return fallback on the root attractor.
 	func get_primary_of(name : StringName, fallback = null):
 		var gravitor_state = _gravitor_states.get(name, null)
 		if gravitor_state:
@@ -81,11 +81,38 @@ class State extends RefCounted:
 func peek_at_time(time : float) -> State:
 	var state = _new_state_with_gravitors(time)
 	
-	# TODO TODO TODO small bodies
+	# TODO: gravitees
 	
 	return state
 
-# TODO: per-item peeking, right? Would be useful!
+
+## Non-updating time-query function, used to poll the position of a single body.
+## Returns the fallback value if the body is not found.
+func peek_at_body_position(time : float, name : StringName, fallback = null):
+	var state = _peek_at_body_state(time, name)
+	if state and state.has_method("get_pos"):
+		return state.get_pos().vec3()
+	return fallback
+
+
+## Non-updating time-query function, used to poll the velocity of a single body.
+## Returns the fallback value if the body is not found.
+func peek_at_body_velocity(time : float, name : StringName, fallback = null):
+	var state = _peek_at_body_state(time, name)
+	if state and state.has_method("get_vel"):
+		return state.get_vel().vec3()
+	return fallback
+
+
+# Core of the above queries
+func _peek_at_body_state(time : float, name : StringName):
+	var gravitor = _gravitors.get(name, null)
+	if gravitor:
+		return cached_gravitor_query(time)[name] # TODO: all-gravitor vs one-gravitor caching
+	var gravitee = _gravitees.get(name, null)
+	if gravitee:
+		return gravitee.state_at_time(time)
+	return null
 
 
 ## Updating time-query function, used to advance the simulation. If any small body in the
@@ -134,13 +161,19 @@ func _new_state_with_gravitors(time : float) -> State:
 ## root attractor of the system (as it's a fallback for various things)
 func _init(root_name : StringName, root_mu : float):
 	_root_name = root_name
-	var new_root_gravitor = Gravitor.new()
-	new_root_gravitor.name = root_name
-	new_root_gravitor.pos_0 = DoubleVector3.ZERO()
-	new_root_gravitor.vel_0 = DoubleVector3.ZERO()
-	new_root_gravitor.mu = root_mu
-	new_root_gravitor.parent_name = &""
-	new_root_gravitor.parent = null
+	var new_root_gravitor = Gravitor.new(
+		root_name,
+		root_mu,
+		&"",
+		null,
+	)
+#	var new_root_gravitor = Gravitor.new()
+#	new_root_gravitor.name = root_name
+#	new_root_gravitor.pos_0 = DoubleVector3.ZERO()
+#	new_root_gravitor.vel_0 = DoubleVector3.ZERO()
+#	new_root_gravitor.mu = root_mu
+#	new_root_gravitor.parent_name = &""
+#	new_root_gravitor.parent = null
 	# TODO set meaningful otherstate
 	_gravitors[_root_name] = new_root_gravitor
 
@@ -178,49 +211,38 @@ func add_gravitor(name : StringName, parent_name : StringName, parameters : Dict
 	var parent : Gravitor = _gravitors.get(parent_name)
 	assert(parent, "Parent not found!")
 	
-	var new_child := Gravitor.new()
-	new_child.name = name
-	new_child.mu = child_mu
-	new_child.parent_name = parent_name
-	new_child.parent = parent
-	
-	new_child.arg_periapsis = orbit.get("arg_periapsis", 0.0)
-	new_child.inclination = orbit.get("inclination", 0.0)
-	new_child.ascending_long = orbit.get("ascending_long", 0.0)
-	new_child.time_since_peri = orbit.get("time_since_peri", 0.0)
-	
 	# Fetch essential orbit parametrization
+	var semimajor_axis := 0.0
+	var eccentricity := 0.0
 	if("periapsis" in orbit and "apoapsis" in orbit):
 		# From apsides
 		
-		new_child.periapsis = orbit["periapsis"]
-		new_child.apoapsis = orbit["apoapsis"]
-		new_child.semimajor_axis = (new_child.periapsis + new_child.apoapsis) / 2.0
-		new_child.eccentricity = 1.0 - (new_child.periapsis / new_child.semimajor_axis)
+		var periapsis = orbit["periapsis"]
+		var apoapsis = orbit["apoapsis"]
+		semimajor_axis = (periapsis + apoapsis) / 2.0
+		eccentricity = 1.0 - (periapsis / semimajor_axis)
 		
 	elif("semimajor_axis" in orbit and "eccentricity" in orbit):
 		# From axis/eccentricity
 		
-		new_child.semimajor_axis = orbit["semimajor_axis"]
-		new_child.eccentricity = orbit["eccentricity"]
-		new_child.periapsis = new_child.semimajor_axis / (1.0 - new_child.eccentricity)
-		new_child.apoapsis = new_child.semimajor_axis / (1.0 + new_child.eccentricity)
+		semimajor_axis = orbit["semimajor_axis"]
+		eccentricity = orbit["eccentricity"]
 		
 	else:
 		assert(false, "Must specify either apo/periapsidal pair or axis/eccentricity pair!")
 	
-	# Compute initial state from orbital parameters
-	var initial_state = UniversalKepler.initial_conditions_from_kepler(
-		parent.mu, new_child.semimajor_axis, new_child.eccentricity, new_child.arg_periapsis, 
-		new_child.inclination, new_child.ascending_long, new_child.time_since_peri
+	var new_child := Gravitor.new(
+		name,
+		child_mu,
+		parent_name,
+		parent,
+		semimajor_axis,
+		eccentricity,
+		orbit.get("arg_periapsis", 0.0),
+		orbit.get("inclination", 0.0),
+		orbit.get("ascending_long", 0.0),
+		orbit.get("time_since_peri", 0.0),
 	)
-	new_child.pos_0 = initial_state[0]
-	new_child.vel_0 = initial_state[1]
-	
-	# Set the new gravitor's remaining celestial properties
-	new_child.period = TAU * sqrt((new_child.semimajor_axis * new_child.semimajor_axis * new_child.semimajor_axis) / (parent.mu + child_mu))
-	new_child.soi_radius = 0.9431 * new_child.semimajor_axis * pow(child_mu / parent.mu, 2.0/5.0)
-	new_child.soi_radius_squared = new_child.soi_radius * new_child.soi_radius
 	
 	# Add the new gravitor to the gravitor tree
 	parent.children.append(new_child)
@@ -236,10 +258,16 @@ func add_gravitee(name : StringName, pos_0 : Vector3, vel_0 : Vector3, time_0 : 
 	assert(not name in _gravitors, "Body names must be unique!")
 	assert(not name in _gravitees, "Body names must be unique!")
 	
-	var gravitee = Gravitee.new(DoubleVector3.from_vec3(pos_0), DoubleVector3.from_vec3(vel_0), time_0, cached_gravitor_query)
+	var gravitee = Gravitee.new(DoubleVector3.from_vec3(pos_0), DoubleVector3.from_vec3(vel_0), time_0, cached_gravitor_query, _root_name)
 	_gravitees[name] = gravitee
 
 # TODO: small body force modification.
+
+# TODO EXPERIMENTAL: DOCUMENT
+func change_gravitee_reference_gravitor(gravitee_name : StringName, gravitor_name : StringName) -> void:
+	assert(gravitee_name in _gravitees, "Gravitee not found!")
+	assert(gravitor_name in _gravitors, "Gravitor not found!")
+	_gravitees[gravitee_name].change_reference_gravitor(gravitor_name)
 
 # TODO: small body safe deletion
 func remove_gravitee(name : StringName) -> void:

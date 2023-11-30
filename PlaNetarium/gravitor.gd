@@ -9,37 +9,11 @@ extends RefCounted
 ## Unique name for this gravitor
 var name : StringName
 
+
+# === CELESTIAL PROPERTIES ===
+
 ## Standard Gravitational Parameter (G * M) of this body.
 var mu : float
-
-## Local position of body at reference time.
-var pos_0 : DoubleVector3
-
-## Local velocity of body at reference time.
-var vel_0 : DoubleVector3
-
-## Parent gravitor, null for the root body.
-var parent : Gravitor
-
-## Parent name, used only for external property queries by the view.
-var parent_name : StringName = &""
-
-## Array of Gravitor children of this body.
-var children = []
-
-# Previous universal anomaly; cached for increased speed
-var _prev_psi := 0.0
-
-# Last queried global state cache (TODO sophisticated caching on PER GRAVITOR BASIS...?)
-var last_query_time : float = -INF
-var last_query_state : GlobalState
-
-
-# ========== CELESTIAL PROPERTIES ==========
-
-# The initial values are fallback safeties for the root primary (TODO resolve)
-var soi_radius : float = 7.4e12 # TODO: unsafe. Used in 'approx satellite period calc'; for root, this should be fixed high value.
-var soi_radius_squared : float = INF # TODO ditto, though this is used only in primary membership calc.
 
 var periapsis : float = 0.0
 var apoapsis : float = 0.0
@@ -51,6 +25,84 @@ var inclination : float = 0.0
 var ascending_long : float = 0.0
 var time_since_peri : float = 0.0
 
+# The initial values are fallback safeties for the root primary (TODO resolve)
+var soi_radius : float = 7.4e12 # TODO: unsafe. Used in 'approx satellite period calc'; for root, this should be fixed high value.
+var soi_radius_squared : float = INF # TODO ditto, though this is used only in primary membership calc.
+
+
+# === HIERARCHY ===
+
+## Parent gravitor, null for the root body.
+var parent : Gravitor
+
+## Parent name, used only for external property queries by the view.
+var parent_name : StringName = &""
+
+## Array of Gravitor children of this body.
+var children = []
+
+# Last queried global state cache (TODO sophisticated caching on PER GRAVITOR BASIS...?)
+var last_query_time : float = -INF
+var last_query_state : GlobalState
+
+
+# === UNIVERSAL-VARIABLE MODEL STATE ===
+
+## Local position of body at reference time.
+var pos_0 : DoubleVector3
+
+## Local velocity of body at reference time.
+var vel_0 : DoubleVector3
+
+# Previous universal anomaly; cached for increased speed
+var _prev_psi := 0.0
+
+
+
+func _init(
+	name_,
+	mu_,
+	parent_name_,
+	parent_,
+	semimajor_axis_ := 0.0,
+	eccentricity_ := 0.0,
+	arg_periapsis_ := 0.0,
+	inclination_ := 0.0,
+	ascending_long_ := 0.0,
+	time_since_peri_ := 0.0,
+) -> void:
+	name = name_
+	mu = mu_
+	parent_name = parent_name_
+	parent = parent_
+	semimajor_axis = semimajor_axis_
+	eccentricity = eccentricity_
+	arg_periapsis = arg_periapsis_
+	inclination = inclination_
+	ascending_long = ascending_long_
+	time_since_peri = time_since_peri_
+	
+	periapsis = semimajor_axis / (1.0 - eccentricity)
+	apoapsis = semimajor_axis / (1.0 + eccentricity)
+	
+	if parent:
+		period = TAU * sqrt((semimajor_axis * semimajor_axis * semimajor_axis) / (parent.mu + mu))
+		soi_radius = 0.9431 * semimajor_axis * pow(mu / parent.mu, 2.0/5.0)
+		soi_radius_squared = soi_radius * soi_radius
+		
+		# Universal Kepler parameter setup
+		var initial_state = UniversalKepler.initial_conditions_from_kepler(
+			parent.mu, semimajor_axis, eccentricity, arg_periapsis, 
+			inclination, ascending_long, time_since_peri
+		)
+		pos_0 = initial_state[0]
+		vel_0 = initial_state[1]
+	else:
+		# Parentless root
+		pos_0 = DoubleVector3.ZERO()
+		vel_0 = DoubleVector3.ZERO()
+		
+		# TODO: good SOI for root?
 
 
 
@@ -96,9 +148,9 @@ func _temp_kepple(time : float):
 	
 	var velocity = _temp_orbitplane_to_global(p_v, q_v)
 	
-	return velocity
+	return [position, velocity]
 	# TODO return
-	# TODO VELOCITY? See stackf. for sol'n, but may be overkill?
+
 
 # TODO doc
 func _temp_orbitplane_to_global(p : float, q : float) -> DoubleVector3:

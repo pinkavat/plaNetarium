@@ -113,7 +113,7 @@ func change_point(index : int, data):
 
 
 # TODO doc
-func invalidate(index : int):
+func invalidate(index : int, _throwaway):
 	
 	var backing_index := index * VERTICES_PER_POINT
 	

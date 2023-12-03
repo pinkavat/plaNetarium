@@ -2,7 +2,8 @@ extends Node3D
 
 # Test driver script
 
-var sponch
+# Watcher for sponch
+var temp_watcher : ApsisWatcher
 
 var planetarium : PlaNetarium
 var view : PlaNetariumView
@@ -38,12 +39,13 @@ func _ready():
 
 	planetarium.add_gravitee(&"sponch", lunar_global[0].vec3(), lunar_global[1].vec3(), 0.0)
 	view.load_small_body(&"sponch", PlaNetariumView.ViewType.PREDICTABLE, {"color" : Color.GRAY})
+	temp_watcher = planetarium.get_apsis_watcher_for(&"sponch")
 
-	planetarium.add_gravitee(&"quell", lunar_orbit[0].mul(2.0).add(earth_orbit[0]).vec3(), lunar_global[1].vec3(), 0.0)
-	view.load_small_body(&"quell", PlaNetariumView.ViewType.PREDICTABLE, {"color" : Color.ORANGE})
+	#planetarium.add_gravitee(&"quell", lunar_orbit[0].mul(2.0).add(earth_orbit[0]).vec3(), lunar_global[1].vec3(), 0.0)
+	#view.load_small_body(&"quell", PlaNetariumView.ViewType.PREDICTABLE, {"color" : Color.ORANGE})
 
-	planetarium.add_gravitee(&"quert", lunar_orbit[0].mul(8.0).add(earth_orbit[0]).vec3(), lunar_global[1].vec3(), 0.0)
-	view.load_small_body(&"quert", PlaNetariumView.ViewType.PREDICTABLE, {"color" : Color.YELLOW})
+	#planetarium.add_gravitee(&"quert", lunar_orbit[0].mul(8.0).add(earth_orbit[0]).vec3(), lunar_global[1].vec3(), 0.0)
+	#view.load_small_body(&"quert", PlaNetariumView.ViewType.PREDICTABLE, {"color" : Color.YELLOW})
 
 
 func _process(_delta):
@@ -56,3 +58,4 @@ func _process(_delta):
 		view.running = not view.running
 	
 	$Label.text = "cache hit/miss ratio: " + str(planetarium.get_cache_ratio())
+	$Label.text = $Label.text + "\nperis: " + str(temp_watcher.periapsides)

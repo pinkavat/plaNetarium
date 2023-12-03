@@ -140,11 +140,14 @@ func load_small_body(body_name : StringName, view_type: ViewType, properties : D
 			orbit_line.color = properties.get('color', Color.MAGENTA)
 			planetarium.connect_orbit_line(body_name, orbit_line)
 			
+			# TODO add set and regen funcs for ref frame
+			planetarium.change_gravitee_reference_gravitor(body_name, &"earth")
+			_views[&"earth"].add_child(orbit_line)
+			
 			# TODO hmmm. Transform concerns!
-			var temp_recenterer = Node.new()
-			temp_recenterer.add_child(orbit_line)
-			new_view.add_child(temp_recenterer)
-
+			#var temp_recenterer = Node.new()
+			#temp_recenterer.add_child(orbit_line)
+			#new_view.add_child(temp_recenterer)
 	
 	# Setup shared by all views
 	var click_target = new_view.get_node("ClickTarget")

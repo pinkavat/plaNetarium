@@ -186,6 +186,8 @@ func state_at_time(time : float) -> GlobalState:
 			var local_state := UniversalKepler.query(pos_0, vel_0, 0.0, time, parent.mu, _prev_psi)
 			_prev_psi = local_state[2]
 			
+			#var local_state = _temp_kepple(time)
+			
 			
 			# Get parent's global state recursively
 			var parent_state := parent.state_at_time(time)

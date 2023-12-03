@@ -31,10 +31,17 @@ var long_cache_tail : int
 ## given a time.
 var state_fetch : Callable
 
+
 ## TODO EXPERIMENTAL: name of the Gravitor relative to whose frame of reference
 ## relative position is computed. Must be a valid key to a return from state_fetch.
 var reference_gravitor_name : StringName
 
+## TODO EXPERIMENTAL DOC
+func change_reference_gravitor(new_gravitor_name : StringName):
+	reference_gravitor_name = new_gravitor_name
+	# TODO: Regenerate cache relative positions.
+	# TODO: do this by simply resetting -- it's akin to a thruster burn, it MUST
+	# be cheap!
 
 # In order to simplify maneuvering (that is, projection of future state under
 # arbitrary velocity changes), gravitees can form a doubly-linked list.
@@ -56,11 +63,10 @@ var successor_ref : WeakRef = null
 var _time_0 : float
 
 
-
 ## TODO: experimental. Obtain the admissible error for a given primary.
 ## TODO should be a property of the gravitor, like the acceptable jump
 func admissible_error_of(primary : Gravitor) -> float:
-	return 10.0 # TODO
+	return 100.0 # TODO
 
 
 ## Initialize a new Gravitee, with an initial Cartesian state (position and velocity) at
@@ -107,9 +113,8 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 	
 	# Reset the long cache
 	long_cache.shift_left(long_cache_tail)
-	long_cache.set_at(0, State.new(qtime_0, pos_0, vel_0, primary, pos_0.sub(initial_gravitor_state[reference_gravitor_name].get_pos())))
+	long_cache.set_at(0, State.new(qtime_0, pos_0, vel_0, primary, sqrt(min_rel), pos_0.sub(initial_gravitor_state[reference_gravitor_name].get_pos()), 0))
 	long_cache_tail = 0
-	
 	
 	# === MANEUVER STUFF ===
 	
@@ -128,10 +133,7 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 				break
 
 
-## TODO EXPERIMENTAL DOC
-func change_reference_gravitor(new_gravitor_name : StringName):
-	reference_gravitor_name = new_gravitor_name
-	# TODO: Regenerate cache relative positions.
+
 
 
 ## Get the Cartesian state of this Gravitee at the given time (TODO quantum or no?)
@@ -196,10 +198,15 @@ func state_at_time(time : float, update_cache : bool = false):
 			else:
 				bsearch_right = mid - 1
 		preceding_cache_index = bsearch_left
-		
+	
 	# 4) If we've reached this point, preceding_cache_index is validly set.
 	#    smart_propagate forward from it until we hit the desired time.
 	var state : State = long_cache.get_at(preceding_cache_index)
+	
+	# TODO EXPERIMENTAL: Apsides are associated with cache points, so
+	# propagating from a cachepoint to a cachepoint transfers apsishood.
+	var apsis_flags = (state.flags & FLAG_APOAPSIS) | (state.flags & FLAG_PERIAPSIS)
+	
 	while(state.qtime < qt):
 		state = _smart_propagate(state, qt)
 		# TODO safety valve?
@@ -208,6 +215,9 @@ func state_at_time(time : float, update_cache : bool = false):
 	# 	 if this is an updating operation, we need to move the cache head and
 	#	 overwrite it.
 	if update_cache:
+		
+		# TODO EXPERIMENTAL Ensure the cache retains apsis information:
+		state.flags |= apsis_flags
 		long_cache.shift_left(preceding_cache_index)
 		long_cache_tail -= preceding_cache_index
 		long_cache.set_at(0, state)
@@ -227,26 +237,42 @@ func advance_cache() -> bool:
 			
 			var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
 			
-			# TODO: finalize/stabilize coarseness metric
-			
-			# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
-			# TODO: so we approximate it, by guesstimating an 'average orbital period of a satellite'
-			# which is a fixed gravitor proprerty; if it works, set it in the gravitor initializer.
-			
-			var synth_semim = tail_state.primary.soi_radius / 2.0
-			var estim_period = TAU * sqrt((synth_semim * synth_semim * synth_semim) / tail_state.primary.mu)
-			
-			estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0)
-			
-			@warning_ignore("narrowing_conversion")
-			var admissible_jump =  (estim_period / 256.0) / (time_quantum) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
-			
-			
-			#if long_cache_tail <= 0 or (not tail_state.get_pos().equals_approx(long_cache.get_at(long_cache_tail - 1).get_pos(), 1_000_000_000.0)):
-			if long_cache_tail <= 0 or (abs(tail_state.qtime - long_cache.get_at(long_cache_tail - 1).qtime) > admissible_jump):
-				# Not enough items OR coarseness criterion satisfied: add the state to the cache.
+			if long_cache_tail <= 0:
+				# Not enough items; add the next state.
 				long_cache_tail += 1
-			# Otherwise coarseness criterion failed, and no need to add: replace the tail.
+				
+			# TODO EXPERIMENTAL: Apsis detection
+			elif bool(tail_state.flags & FLAG_MOVING_AWAY) != bool(next_state.flags & FLAG_MOVING_AWAY):
+				# Apsis; always register it in the cache
+				long_cache_tail += 1
+				
+				# Set relevant flag in the *tail* state (TODO: this futzes with some assumptions about
+				# cache signalling, no...?)
+				tail_state.flags |= (FLAG_APOAPSIS if (tail_state.flags & FLAG_MOVING_AWAY) else FLAG_PERIAPSIS)
+				long_cache.set_at(long_cache_tail, tail_state)
+			else:
+				# Test coarseness
+				# TODO: finalize/stabilize coarseness metric
+				
+				# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
+				# TODO: so we approximate it, by guesstimating an 'average orbital period of a satellite'
+				# which is a fixed gravitor proprerty; if it works, set it in the gravitor initializer.
+				
+				var synth_semim = tail_state.primary.soi_radius / 2.0
+				var estim_period = TAU * sqrt((synth_semim * synth_semim * synth_semim) / tail_state.primary.mu)
+				
+				estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0)
+				var SLICES_PER_PERIOD = 128.0
+				
+				@warning_ignore("narrowing_conversion")
+				var admissible_jump =  (estim_period / SLICES_PER_PERIOD) / (time_quantum) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
+				
+				#if long_cache_tail <= 0 or (not tail_state.get_pos().equals_approx(long_cache.get_at(long_cache_tail - 1).get_pos(), 1_000_000_000.0)):
+				if (abs(tail_state.qtime - long_cache.get_at(long_cache_tail - 1).qtime) > admissible_jump):
+					# Coarseness criterion satisfied: add the state to the cache.
+					long_cache_tail += 1
+			
+			# Set state at tail, whether we advanced it or not.
 			long_cache.set_at(long_cache_tail, next_state)
 			
 			return false # More work to be done
@@ -339,6 +365,8 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	
 	# TODO: INSERT THIS AS PART OF ONE OF THE FORCE PASSES.
 	# TODO: fallback to system root (primary never null)
+	# There's a pattern implied by how both the primary and the distance are stored
+	# in state object...
 	var primary : Gravitor = null
 	var min_rel := INF
 	for gravitor_state in gravitors.values():
@@ -389,11 +417,25 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	vel = vel.add(acc.mul(dt * (0.5 - lambda)))
 	pos = pos.add(vel.mul(dt * xi))
 	
-	return State.new(state.qtime + qdt, pos, vel, primary, pos.sub(gravitors[reference_gravitor_name].get_pos()))
+	#return State.new(state.qtime + qdt, pos, vel, primary, pos.sub(gravitors[reference_gravitor_name].get_pos()))
+	
+	# TODO considerations -- it's accurate-looking, more so than the 
+	# other stuff, which has jaggies.
+	var temp_next_g = state_fetch.call(float(state.qtime + qdt) * time_quantum)
+	var next_rel = pos.sub(temp_next_g[reference_gravitor_name].get_pos())
+	var moving_away = next_rel.dot(next_rel) > min_rel
+	return State.new(state.qtime + qdt, pos, vel, primary, sqrt(min_rel), next_rel, (FLAG_MOVING_AWAY if moving_away else 0))
 
 
 
 # ========== STATE CLASS ==========
+
+# To save on memory footprint, we define bitflags outside the state class.
+const FLAG_MOVING_AWAY : int = 1 << 0
+const FLAG_PERIAPSIS : int = 1 << 1
+const FLAG_APOAPSIS : int = 1 << 2
+# TODO flags for atmospheric entry/exit, planetary impact, etc, etc.
+
 
 ## State class used internally (stored in the long cache, etc.)
 ## to alleviate memory footprint and clarify names.
@@ -416,7 +458,7 @@ class State extends RefCounted:
 	var _vel_z : float
 	
 	## Don't set state members. If we need to change them, just make a new state:
-	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3, primary_ : Gravitor, rel_pos_ : DoubleVector3):
+	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3, primary_ : Gravitor, dist_to_primary_ : float, rel_pos_ : DoubleVector3, flags_ : int):
 		qtime = qtime_
 		primary = primary_
 		_pos_x = pos_.x
@@ -428,6 +470,8 @@ class State extends RefCounted:
 		_rel_pos_x = rel_pos_.x
 		_rel_pos_y = rel_pos_.y
 		_rel_pos_z = rel_pos_.z
+		dist_to_primary = dist_to_primary_
+		flags = flags_
 	
 	## Position getter; Doublevec is brand-new
 	func get_pos() -> DoubleVector3:
@@ -438,10 +482,19 @@ class State extends RefCounted:
 		return DoubleVector3.new(_vel_x, _vel_y, _vel_z)
 	
 	
-	# TODO EXPERIMENTAL: RELATIVE POSITION
+	# TODO EXPERIMENTAL: RELATIVE POSITION TO REFERENCE BODY
 	var _rel_pos_x : float
 	var _rel_pos_y : float
 	var _rel_pos_z : float
 	
+	## TODO EXPERIMENTAL: RELATIVE POSITION TO REFERENCE BODY
 	func get_rel_pos() -> DoubleVector3:
 		return DoubleVector3.new(_rel_pos_x, _rel_pos_y, _rel_pos_z)
+	
+	
+	## TODO EXPERIMENTAL: APSIS DETECTION
+	var dist_to_primary : float
+	
+	## TODO EXPERIMENTAL: APSIS DETECTION
+	## Bitflags for this state. See definitions in Gravitee.
+	var flags : int

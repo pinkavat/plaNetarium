@@ -167,14 +167,6 @@ func _init(root_name : StringName, root_mu : float):
 		&"",
 		null,
 	)
-#	var new_root_gravitor = Gravitor.new()
-#	new_root_gravitor.name = root_name
-#	new_root_gravitor.pos_0 = DoubleVector3.ZERO()
-#	new_root_gravitor.vel_0 = DoubleVector3.ZERO()
-#	new_root_gravitor.mu = root_mu
-#	new_root_gravitor.parent_name = &""
-#	new_root_gravitor.parent = null
-	# TODO set meaningful otherstate
 	_gravitors[_root_name] = new_root_gravitor
 
 
@@ -269,6 +261,7 @@ func change_gravitee_reference_gravitor(gravitee_name : StringName, gravitor_nam
 	assert(gravitor_name in _gravitors, "Gravitor not found!")
 	_gravitees[gravitee_name].change_reference_gravitor(gravitor_name)
 
+
 # TODO: small body safe deletion
 func remove_gravitee(name : StringName) -> void:
 	assert(name in _gravitees, "Gravitee not found!")
@@ -290,7 +283,7 @@ func remove_gravitee(name : StringName) -> void:
 
 # ========== RUNNING THE SIMULATION ==========
 
-## Invoke with a time budget in milliseconds. The simulation will do its background
+## Invoke with a time budget in microseconds. The simulation will do its background
 ## cache-advancing, etcetera, within said budget, and return what it didn't use.
 func do_background_work(time_budget_usec : int) -> int:
 	var last_time = Time.get_ticks_usec()
@@ -330,8 +323,12 @@ func connect_orbit_line(name : StringName, line : OrbitPolyline) -> void:
 	gravitee.long_cache.changed_item.connect(line.change_point)
 	gravitee.long_cache.invalidate.connect(line.invalidate)
 
-
-
+# TODO: Ditto apsis watcher
+func get_apsis_watcher_for(name : StringName) -> ApsisWatcher:
+	var gravitee = _gravitees.get(name)
+	assert(gravitee, "Cannot find body to connect to!")
+	
+	return ApsisWatcher.new(gravitee)
 
 
 # ========== INNARDS ==========

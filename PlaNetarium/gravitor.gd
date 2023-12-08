@@ -30,13 +30,22 @@ var soi_radius : float = 7.4e12 # TODO: unsafe. Used in 'approx satellite period
 var soi_radius_squared : float = INF # TODO ditto, though this is used only in primary membership calc.
 
 
+# === CONVENIENCE PROPERTIES ===
+# (things that are expedient to compute as part of the integrator pass)
+
+## Propagator will report putative lithobrake if course passes within square root distance of this value.
+var collision_radius_squared : float = 1.0
+
+# atmosphere here
+
+
 # === HIERARCHY ===
 
 ## Parent gravitor, null for the root body.
 var parent : Gravitor
 
 ## Parent name, used only for external property queries by the view.
-var parent_name : StringName = &""
+var parent_name : StringName = &"" # Root value
 
 ## Array of Gravitor children of this body.
 var children = []
@@ -62,7 +71,6 @@ var _prev_psi := 0.0
 func _init(
 	name_,
 	mu_,
-	parent_name_,
 	parent_,
 	semimajor_axis_ := 0.0,
 	eccentricity_ := 0.0,
@@ -73,7 +81,6 @@ func _init(
 ) -> void:
 	name = name_
 	mu = mu_
-	parent_name = parent_name_
 	parent = parent_
 	semimajor_axis = semimajor_axis_
 	eccentricity = eccentricity_
@@ -86,6 +93,7 @@ func _init(
 	apoapsis = semimajor_axis / (1.0 + eccentricity)
 	
 	if parent:
+		parent_name = parent.name
 		period = TAU * sqrt((semimajor_axis * semimajor_axis * semimajor_axis) / (parent.mu + mu))
 		soi_radius = 0.9431 * semimajor_axis * pow(mu / parent.mu, 2.0/5.0)
 		soi_radius_squared = soi_radius * soi_radius

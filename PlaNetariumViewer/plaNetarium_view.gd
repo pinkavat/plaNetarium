@@ -177,11 +177,12 @@ func _process(delta):
 			# Tick succeeded. Update view to reflect:
 			
 			for view_name in _views:
-				var pos = state.get_pos_of(view_name) * space_scale
+				var pos = state.get_pos_of(view_name)
 				var view = _views[view_name]
 				
-				# TODO
-				view.global_position = pos
+				# TODO CRASH DETECTION -- crashed 'tees return null sans explanation
+				if pos:
+					view.global_position = pos * space_scale
 				#if view.has_method("set_pos"):
 				#	view.set_pos(pos)
 			

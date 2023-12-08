@@ -11,6 +11,8 @@ signal apsides_changed
 var _gravitee : Gravitee
 
 var periapsides := {}
+var apoapsides := {}
+var collisions := {}
 
 
 func _init(gravitee_ : Gravitee):
@@ -32,26 +34,42 @@ func _init(gravitee_ : Gravitee):
 func _added_item(_index : int, item : Gravitee.State):
 	
 	# Periapsis check
-	if item.flags & Gravitee.FLAG_PERIAPSIS:
-		var prim_peris = periapsides.get(item.primary.name, null)
-		if prim_peris:
-			# Entry exists for this primary
-			prim_peris.append(item)
-			# TODO maintain sorted order? Emit signal?
-		else:
-			# Entry doesn't exist for this primary
-			periapsides[item.primary.name] = [item]
+	_added_helper(item, Gravitee.FLAG_PERIAPSIS, periapsides)
 	
-	# TODO apo -- make helper
+	# Apoapsis check
+	_added_helper(item, Gravitee.FLAG_APOAPSIS, apoapsides)
+	
+	# Collision check
+	_added_helper(item, Gravitee.FLAG_LITHOBRAKE, collisions)
 
 
 func _invalidate(_index : int, item : Gravitee.State):
 	
 	# Periapsis check
-	if item.flags & Gravitee.FLAG_PERIAPSIS:
-		# Clean out the periapsides associated with this primary
-		var prim_peris = periapsides.get(item.primary.name, null)
-		if prim_peris:
-			periapsides[item.primary.name] = prim_peris.filter(func(x) : return x.qtime > item.qtime)
+	_invalidated_helper(item, Gravitee.FLAG_PERIAPSIS, periapsides)
 	
-	# TODO apo -- make helper
+	# Apoapsis check
+	_invalidated_helper(item, Gravitee.FLAG_APOAPSIS, apoapsides)
+	
+	# Collision check
+	_invalidated_helper(item, Gravitee.FLAG_LITHOBRAKE, collisions)
+
+
+func _added_helper(item : Gravitee.State, flag : int, dict : Dictionary):
+	if item.flags & flag:
+		var prim_items = dict.get(item.primary.name, null)
+		if prim_items:
+			# Entry exists for this primary
+			prim_items.append(item)
+			# TODO maintain sorted order? Emit signal?
+		else:
+			# Entry doesn't exist for this primary
+			dict[item.primary.name] = [item]
+
+
+func _invalidated_helper(item : Gravitee.State, flag : int, dict : Dictionary):
+		if item.flags & flag:
+			# Clean out the items associated with this primary
+			var prim_items = dict.get(item.primary.name, null)
+			if prim_items:
+				dict[item.primary.name] = prim_items.filter(func(x) : return x.qtime > item.qtime)

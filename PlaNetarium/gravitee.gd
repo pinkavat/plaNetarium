@@ -5,8 +5,9 @@ class_name Gravitee
 ##
 ## TODO: document
 ## TODO: linking into plaNetarium: 'primary' is set by an SOI check, which doesn't
-##		 fall back to the system root and SHOULD.
+##		 fall back to the system root and MUST.
 ## TODO: state-at-time query returns a '0' on invalid -- should it?
+## 		 ditto collision
 ## TODO: refactor primary SOI detect/force pass etc.
 
 
@@ -112,8 +113,8 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 			primary = gravitor_state.gravitor
 	
 	# Reset the long cache
-	long_cache.shift_left(long_cache_tail)
-	long_cache.set_at(0, State.new(qtime_0, pos_0, vel_0, primary, sqrt(min_rel), pos_0.sub(initial_gravitor_state[reference_gravitor_name].get_pos()), 0))
+	long_cache.shift_left(long_cache_tail + 1) # + 1 to invalidate even the head.
+	long_cache.set_at(0, State.new(qtime_0, pos_0, vel_0, primary, min_rel, pos_0.sub(initial_gravitor_state[reference_gravitor_name].get_pos()), 0))
 	long_cache_tail = 0
 	
 	# === MANEUVER STUFF ===
@@ -139,7 +140,7 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 ## Get the Cartesian state of this Gravitee at the given time (TODO quantum or no?)
 ## Will return the following:
 ##	- if the requested time PRECEDES any cached time, or the gravitee
-##	  is marked INVALID, returns integer 0
+##	  is marked INVALID, or the request follows a COLLISION, returns integer 0
 ##		("unknown due to external circumstances; ignore me")
 ##	- if the requested time is BEYOND the last cached time, returns integer 1
 ##		("unknown due to unpropagated cache; call advance_cache and ask again")
@@ -177,6 +178,10 @@ func state_at_time(time : float, update_cache : bool = false):
 	elif qt >= long_cache.get_at(long_cache_tail).qtime:
 		# Follows cache; "we will eventually know but don't yet"
 		
+		if long_cache.get_at(long_cache_tail).flags & FLAG_LITHOBRAKE:
+			# If the cache ends in a collision, report "can't ever know"
+			return 0
+		
 		if long_cache_tail == (long_cache.length() - 1) and update_cache:
 			# If it's an updating request and the cache is out of space, we have
 			# to flush the cache, or we'll get stuck.
@@ -203,9 +208,9 @@ func state_at_time(time : float, update_cache : bool = false):
 	#    smart_propagate forward from it until we hit the desired time.
 	var state : State = long_cache.get_at(preceding_cache_index)
 	
-	# TODO EXPERIMENTAL: Apsides are associated with cache points, so
-	# propagating from a cachepoint to a cachepoint transfers apsishood.
-	var apsis_flags = (state.flags & FLAG_APOAPSIS) | (state.flags & FLAG_PERIAPSIS)
+	# TODO EXPERIMENTAL: Flags are associated with cache points, so
+	# propagating from a cachepoint to a cachepoint transfers them
+	var original_flags = state.flags
 	
 	while(state.qtime < qt):
 		state = _smart_propagate(state, qt)
@@ -216,8 +221,8 @@ func state_at_time(time : float, update_cache : bool = false):
 	#	 overwrite it.
 	if update_cache:
 		
-		# TODO EXPERIMENTAL Ensure the cache retains apsis information:
-		state.flags |= apsis_flags
+		# TODO EXPERIMENTAL Ensure the cache retains flags:
+		state.flags |= original_flags
 		long_cache.shift_left(preceding_cache_index)
 		long_cache_tail -= preceding_cache_index
 		long_cache.set_at(0, state)
@@ -235,7 +240,12 @@ func advance_cache() -> bool:
 		if long_cache_tail < (long_cache.length() - 1):
 			var tail_state = long_cache.get_at(long_cache_tail)
 			
+			if tail_state.flags & FLAG_LITHOBRAKE:
+				# Don't propagate if the cache ends in a crash
+				return true
+			
 			var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
+			
 			
 			if long_cache_tail <= 0:
 				# Not enough items; add the next state.
@@ -252,22 +262,17 @@ func advance_cache() -> bool:
 				long_cache.set_at(long_cache_tail, tail_state)
 			else:
 				# Test coarseness
-				# TODO: finalize/stabilize coarseness metric
 				
 				# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
-				# TODO: so we approximate it, by guesstimating an 'average orbital period of a satellite'
-				# which is a fixed gravitor proprerty; if it works, set it in the gravitor initializer.
 				
-				var synth_semim = tail_state.primary.soi_radius / 2.0
-				var estim_period = TAU * sqrt((synth_semim * synth_semim * synth_semim) / tail_state.primary.mu)
+				var estim_period = TAU * sqrt(pow(tail_state.distance_squared_to_primary, 3.0/2.0) / tail_state.primary.mu)
 				
-				estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0)
-				var SLICES_PER_PERIOD = 128.0
+				estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0) # TODO decent fallback
+				var SLICES_PER_PERIOD = 128.0 # TODO parametrize
 				
 				@warning_ignore("narrowing_conversion")
 				var admissible_jump =  (estim_period / SLICES_PER_PERIOD) / (time_quantum) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
 				
-				#if long_cache_tail <= 0 or (not tail_state.get_pos().equals_approx(long_cache.get_at(long_cache_tail - 1).get_pos(), 1_000_000_000.0)):
 				if (abs(tail_state.qtime - long_cache.get_at(long_cache_tail - 1).qtime) > admissible_jump):
 					# Coarseness criterion satisfied: add the state to the cache.
 					long_cache_tail += 1
@@ -368,12 +373,12 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	# There's a pattern implied by how both the primary and the distance are stored
 	# in state object...
 	var primary : Gravitor = null
-	var min_rel := INF
+	var min_rel_to_primary := INF
 	for gravitor_state in gravitors.values():
 		var rel_pos : DoubleVector3 = gravitor_state.get_pos().sub(state.get_pos())
 		var rel_pos_dot := rel_pos.dot(rel_pos)
-		if rel_pos_dot < gravitor_state.gravitor.soi_radius_squared and rel_pos_dot < min_rel:
-			min_rel = rel_pos_dot
+		if rel_pos_dot < gravitor_state.gravitor.soi_radius_squared and rel_pos_dot < min_rel_to_primary:
+			min_rel_to_primary = rel_pos_dot
 			primary = gravitor_state.gravitor
 	
 	# TODO: other forces, externalization, etc.
@@ -421,10 +426,17 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	
 	# TODO considerations -- it's accurate-looking, more so than the 
 	# other stuff, which has jaggies.
+	# TODO compaction -- ditto up above
+	# rel to ref
 	var temp_next_g = state_fetch.call(float(state.qtime + qdt) * time_quantum)
-	var next_rel = pos.sub(temp_next_g[reference_gravitor_name].get_pos())
-	var moving_away = next_rel.dot(next_rel) > min_rel
-	return State.new(state.qtime + qdt, pos, vel, primary, sqrt(min_rel), next_rel, (FLAG_MOVING_AWAY if moving_away else 0))
+	var next_rel_to_ref = pos.sub(temp_next_g[reference_gravitor_name].get_pos())
+	
+	var next_rel_to_primary = pos.sub(temp_next_g[primary.name].get_pos())
+	var next_dist_to_primary_squared = next_rel_to_primary.dot(next_rel_to_primary)
+	var moving_away = next_dist_to_primary_squared > min_rel_to_primary
+	var lithobraking = next_dist_to_primary_squared < primary.collision_radius_squared
+	
+	return State.new(state.qtime + qdt, pos, vel, primary, next_dist_to_primary_squared, next_rel_to_ref, (FLAG_MOVING_AWAY if moving_away else 0) | (FLAG_LITHOBRAKE if lithobraking else 0))
 
 
 
@@ -434,7 +446,8 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 const FLAG_MOVING_AWAY : int = 1 << 0
 const FLAG_PERIAPSIS : int = 1 << 1
 const FLAG_APOAPSIS : int = 1 << 2
-# TODO flags for atmospheric entry/exit, planetary impact, etc, etc.
+const FLAG_LITHOBRAKE : int = 1 << 3
+# TODO flags for atmospheric entry/exit, etc, etc.
 
 
 ## State class used internally (stored in the long cache, etc.)
@@ -458,7 +471,7 @@ class State extends RefCounted:
 	var _vel_z : float
 	
 	## Don't set state members. If we need to change them, just make a new state:
-	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3, primary_ : Gravitor, dist_to_primary_ : float, rel_pos_ : DoubleVector3, flags_ : int):
+	func _init(qtime_ : int, pos_ : DoubleVector3, vel_ : DoubleVector3, primary_ : Gravitor, distance_squared_to_primary_ : float, rel_pos_ : DoubleVector3, flags_ : int):
 		qtime = qtime_
 		primary = primary_
 		_pos_x = pos_.x
@@ -467,10 +480,10 @@ class State extends RefCounted:
 		_vel_x = vel_.x
 		_vel_y = vel_.y
 		_vel_z = vel_.z
+		distance_squared_to_primary = distance_squared_to_primary_
 		_rel_pos_x = rel_pos_.x
 		_rel_pos_y = rel_pos_.y
 		_rel_pos_z = rel_pos_.z
-		dist_to_primary = dist_to_primary_
 		flags = flags_
 	
 	## Position getter; Doublevec is brand-new
@@ -481,6 +494,8 @@ class State extends RefCounted:
 	func get_vel() -> DoubleVector3:
 		return DoubleVector3.new(_vel_x, _vel_y, _vel_z)
 	
+	# TODO EXPERIMENTAL: DISTANCE TO PRIMARY, used in acceptable jump calc
+	var distance_squared_to_primary : float
 	
 	# TODO EXPERIMENTAL: RELATIVE POSITION TO REFERENCE BODY
 	var _rel_pos_x : float
@@ -490,10 +505,6 @@ class State extends RefCounted:
 	## TODO EXPERIMENTAL: RELATIVE POSITION TO REFERENCE BODY
 	func get_rel_pos() -> DoubleVector3:
 		return DoubleVector3.new(_rel_pos_x, _rel_pos_y, _rel_pos_z)
-	
-	
-	## TODO EXPERIMENTAL: APSIS DETECTION
-	var dist_to_primary : float
 	
 	## TODO EXPERIMENTAL: APSIS DETECTION
 	## Bitflags for this state. See definitions in Gravitee.

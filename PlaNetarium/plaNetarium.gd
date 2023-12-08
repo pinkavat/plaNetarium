@@ -122,6 +122,8 @@ func _peek_at_body_state(time : float, name : StringName):
 func move_to_time(time : float) -> State:
 	var state = _new_state_with_gravitors(time)
 	
+	# TODO: what to do if a gravitee collides here?
+	
 	# TODO POSSIBLE BUG: I *think* we're safe? If some gravitees are valid, and some are not
 	# the valid ones will update their caches and move the heads. They'll then receive a
 	# query for the same *time*. This shouldn't be a problem but might be!
@@ -164,7 +166,6 @@ func _init(root_name : StringName, root_mu : float):
 	var new_root_gravitor = Gravitor.new(
 		root_name,
 		root_mu,
-		&"",
 		null,
 	)
 	_gravitors[_root_name] = new_root_gravitor
@@ -174,9 +175,12 @@ func _init(root_name : StringName, root_mu : float):
 ## Parameters:
 ##	name: a unique name for the new body.
 ##	parent: the name of the parent body of the new body. Must exist.
-##	properties: Dictionary with the following items:
+##	parameters: Dictionary with the following items:
 ##		{
 ##			mu [float]: Standard Gravitational Parameter of the body (G * M)
+##
+##			OPTIONAL
+##			collision_radius [float] : distance within which simulation will report a collision (default 1.0)
 ##		}
 ##	orbit: Dictionary with the following items:
 ##		{
@@ -226,7 +230,6 @@ func add_gravitor(name : StringName, parent_name : StringName, parameters : Dict
 	var new_child := Gravitor.new(
 		name,
 		child_mu,
-		parent_name,
 		parent,
 		semimajor_axis,
 		eccentricity,
@@ -235,6 +238,9 @@ func add_gravitor(name : StringName, parent_name : StringName, parameters : Dict
 		orbit.get("ascending_long", 0.0),
 		orbit.get("time_since_peri", 0.0),
 	)
+	
+	if "collision_radius" in parameters:
+		new_child.collision_radius_squared = parameters["collision_radius"] ** 2
 	
 	# Add the new gravitor to the gravitor tree
 	parent.children.append(new_child)

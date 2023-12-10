@@ -244,7 +244,15 @@ func advance_cache() -> bool:
 				# Don't propagate if the cache ends in a crash
 				return true
 			
-			var next_state = _smart_propagate(tail_state, 9223372036854775800) # TODO Maxint
+			# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
+			var estim_period = TAU * sqrt(pow(tail_state.distance_squared_to_primary, 3.0/2.0) / tail_state.primary.mu)
+			estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0) # TODO decent fallback
+			var SLICES_PER_PERIOD = 128.0 # TODO parametrize
+			
+			@warning_ignore("narrowing_conversion")
+			var admissible_jump = max(1, int((estim_period / SLICES_PER_PERIOD) / (time_quantum))) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
+			# Next state is admissible-jump away at most, to protect against timestep overflow
+			var next_state = _smart_propagate(tail_state, tail_state.qtime + admissible_jump)
 			
 			
 			if long_cache_tail <= 0:
@@ -261,19 +269,9 @@ func advance_cache() -> bool:
 				tail_state.flags |= (FLAG_APOAPSIS if (tail_state.flags & FLAG_MOVING_AWAY) else FLAG_PERIAPSIS)
 				long_cache.set_at(long_cache_tail, tail_state)
 			else:
+				
 				# Test coarseness
-				
-				# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
-				
-				var estim_period = TAU * sqrt(pow(tail_state.distance_squared_to_primary, 3.0/2.0) / tail_state.primary.mu)
-				
-				estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0) # TODO decent fallback
-				var SLICES_PER_PERIOD = 128.0 # TODO parametrize
-				
-				@warning_ignore("narrowing_conversion")
-				var admissible_jump =  (estim_period / SLICES_PER_PERIOD) / (time_quantum) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
-				
-				if (abs(tail_state.qtime - long_cache.get_at(long_cache_tail - 1).qtime) > admissible_jump):
+				if (abs(tail_state.qtime - long_cache.get_at(long_cache_tail - 1).qtime) >= admissible_jump):
 					# Coarseness criterion satisfied: add the state to the cache.
 					long_cache_tail += 1
 			

@@ -64,6 +64,11 @@ var successor_ref : WeakRef = null
 var _time_0 : float
 
 
+# Initializer sets this to the system root, so that we have a safe fallback
+# for our primary
+var _primary_fallback : Gravitor
+
+
 ## TODO: experimental. Obtain the admissible error for a given primary.
 ## TODO should be a property of the gravitor, like the acceptable jump
 func admissible_error_of(primary : Gravitor) -> float:
@@ -74,11 +79,13 @@ func admissible_error_of(primary : Gravitor) -> float:
 ## the given time. Provide the callable that furnishes the gravitor state array.
 ## Optionally specify the initial long cache size (positive integer).
 func _init(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float, 
-	state_fetch_ : Callable, reference_gravitor_name_ : StringName, long_cache_size : int = 256
+	state_fetch_ : Callable, reference_gravitor_name_ : StringName, primary_fallback_ : Gravitor, 
+	long_cache_size : int = 256
 	) -> void:
 	
 	state_fetch = state_fetch_
 	reference_gravitor_name = reference_gravitor_name_
+	_primary_fallback = primary_fallback_
 	
 	# Set up the long cache
 	long_cache = RingBuffer.new(long_cache_size)
@@ -102,7 +109,7 @@ func reset(pos_0 : DoubleVector3, vel_0 : DoubleVector3, time_0 : float):
 	# Perform a check to get our primary gravitor
 	# TODO: this is duplicate code of the pass in PEFRL below!
 	# (with all caveats thereto appertaining)
-	var primary : Gravitor = null
+	var primary : Gravitor = _primary_fallback
 	var min_rel := INF
 	var initial_gravitor_state = state_fetch.call(float(qtime_0) * time_quantum)
 	for gravitor_state in initial_gravitor_state.values():
@@ -247,7 +254,7 @@ func advance_cache() -> bool:
 			# Compute the acceptable jump, which is based on the orbital period AROUND the primary.
 			var estim_period = TAU * sqrt(pow(tail_state.distance_squared_to_primary, 3.0/2.0) / tail_state.primary.mu)
 			estim_period = min(estim_period, 365.0 * 24.0 * 60.0 * 60.0) # TODO decent fallback
-			var SLICES_PER_PERIOD = 128.0 # TODO parametrize
+			var SLICES_PER_PERIOD = 128.0 # TODO parametrize OR JUST REPLACE -- REL ANGLE THING?
 			
 			@warning_ignore("narrowing_conversion")
 			var admissible_jump = max(1, int((estim_period / SLICES_PER_PERIOD) / (time_quantum))) # I *think* this is OK? seconds / (seconds/quantum) = quanta?
@@ -367,10 +374,9 @@ func quant_PEFRL(state : State, qdt : int) -> State:
 	var gravitors = state_fetch.call(float(state.qtime) * time_quantum)
 	
 	# TODO: INSERT THIS AS PART OF ONE OF THE FORCE PASSES.
-	# TODO: fallback to system root (primary never null)
 	# There's a pattern implied by how both the primary and the distance are stored
 	# in state object...
-	var primary : Gravitor = null
+	var primary : Gravitor = _primary_fallback
 	var min_rel_to_primary := INF
 	for gravitor_state in gravitors.values():
 		var rel_pos : DoubleVector3 = gravitor_state.get_pos().sub(state.get_pos())

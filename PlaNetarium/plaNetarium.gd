@@ -256,7 +256,7 @@ func add_gravitee(name : StringName, pos_0 : Vector3, vel_0 : Vector3, time_0 : 
 	assert(not name in _gravitors, "Body names must be unique!")
 	assert(not name in _gravitees, "Body names must be unique!")
 	
-	var gravitee = Gravitee.new(DoubleVector3.from_vec3(pos_0), DoubleVector3.from_vec3(vel_0), time_0, cached_gravitor_query, _root_name)
+	var gravitee = Gravitee.new(DoubleVector3.from_vec3(pos_0), DoubleVector3.from_vec3(vel_0), time_0, cached_gravitor_query, _root_name, _gravitors[_root_name])
 	_gravitees[name] = gravitee
 
 # TODO: small body force modification.
